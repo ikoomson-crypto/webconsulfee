@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .payment-row {
+        background: #f8f9fa;
+        margin-bottom: 10px;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #28a745;
+        transition: all 0.3s ease;
+    }
+    .payment-row:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .remove-row {
+        cursor: pointer;
+        color: #dc3545;
+        transition: 0.3s;
+    }
+    .remove-row:hover {
+        color: #c82333;
+        transform: scale(1.1);
+    }
+    .add-more-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        transition: 0.3s;
+    }
+    .add-more-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+    .payment-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        transition: transform 0.3s;
+    }
+    .payment-card:hover {
+        transform: translateY(-5px);
+    }
+    .import-btn {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 5px;
+        transition: 0.3s;
+    }
+    .import-btn:hover {
+        background: #218838;
+        transform: translateY(-1px);
+    }
+    #loadingOverlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+        z-index: 9999;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+    .spinner-border {
+        width: 4rem;
+        height: 4rem;
+    }
+</style>
+
+<div class="card">
+    <div class="card-header bg-white">
+        <h4><i class="fas fa-credit-card"></i> Payment Processing</h4>
+    </div>
+    <div class="card-body">
+        <!-- Payment Statistics -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="payment-card text-center">
+                    <i class="fas fa-chart-line fa-2x"></i>
+                    <h6 class="mt-2">Total Payments</h6>
+                    <h3>{{ payments_count }}</h3>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="payment-card text-center">
+                    <i class="fas fa-money-bill-wave fa-2x"></i>
+                    <h6 class="mt-2">Total Amount Paid</h6>
+                    <h3>₦{{ "{:,.0f}".format(total_paid|float) if total_paid else "0" }}</h3>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="payment-card text-center">
+                    <i class="fas fa-clock fa-2x"></i>
+                    <h6 class="mt-2">Pending Amount</h6>
+                    <h3>₦{{ "{:,.0f}".format(pending_amount|float) if pending_amount else "0" }}</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-plus-circle"></i> Process New Payments
+                            <button type="button" class="btn btn-light btn-sm float-end" data-bs-toggle="modal" data-bs-target="#importPaymentsModal" style="color: #28a745;">
+                                <i class="fas fa-file-excel"></i> Import from Excel
+                            </button>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="multiPaymentForm" method="POST" action="{{ url_for('process_multiple_payments') }}">
+                            <div id="paymentsContainer">
+                                <!-- Payment Row 1 -->
+                                <div class="payment-row" id="payment-row-1">
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <label class="form-label">Select Supplier *</label>
+                                            <select class="form-control supplier-select" name="supplier_id[]" required>
+                                                <option value="">-- Select Supplier --</option>
+                                                {% for supplier in suppliers %}
+                                                <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label">Service Description *</label>
+                                            <input type="text" class="form-control" name="service_description[]" placeholder="Enter service description" required>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label">Amount (₦) *</label>
+                                            <input type="number" class="form-control amount-input" name="amount[]" step="0.01" required>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label">Action</label><br>
+                                            <button type="button" class="btn btn-danger remove-row" onclick="removePaymentRow(1)" style="display: none;">
+                                                <i class="fas fa-trash"></i> Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-md-3">
+                                            <label class="form-label">Payment Method *</label>
+                                            <select class="form-control" name="payment_method[]" required>
+                                                <option value="">-- Select --</option>
+                                                <option value="Bank Transfer">Bank Transfer</option>
+                                                <option value="Cash">Cash</option>
+                                                <option value="Cheque">Cheque</option>
+                                                <option value="Mobile Money">Mobile Money</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Reference Number</label>
+                                            <input type="text" class="form-control" name="reference_number[]" placeholder="Transaction ID">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Payment Date</label>
+                                            <input type="date" class="form-control" name="payment_date[]" value="{{ now }}" required>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label">Notes</label>
+                                            <input type="text" class="form-control" name="notes[]" placeholder="Additional notes">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row mt-3">
+                                <div class="col-md-12">
+                                    <button type="button" class="add-more-btn" onclick="addPaymentRow()">
+                                        <i class="fas fa-plus"></i> Add Another Payment
+                                    </button>
+                                    <button type="submit" class="btn btn-success float-end" style="background: #28a745;">
+                                        <i class="fas fa-check-circle"></i> Process All Payments (0)
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Payments Modal -->
+<div class="modal fade" id="importPaymentsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-file-excel"></i> Import Payments from Excel</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-info-circle"></i> Instructions:</h6>
+                    <ul>
+                        <li>Download the template Excel file below</li>
+                        <li>Fill in payment details (Supplier Name, Service Description, Amount, etc.)</li>
+                        <li>Upload the filled file for bulk payment processing</li>
+                        <li>Maximum 1000 payments per import</li>
+                        <li>Supported formats: .xlsx, .xls, .csv</li>
+                    </ul>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <a href="{{ url_for('download_payment_template') }}" class="btn btn-primary w-100">
+                            <i class="fas fa-download"></i> Download Excel Template
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <form id="importPaymentsForm" action="{{ url_for('import_payments_excel') }}" method="POST" enctype="multipart/form-data">
+                            <div class="input-group">
+                                <input type="file" class="form-control" name="payment_file" id="paymentFile" accept=".xlsx,.xls,.csv" required>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-upload"></i> Upload & Process
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal fade" id="receiptModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-receipt"></i> Payment Receipt</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="receiptContent"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="printReceipt()">
+                    <i class="fas fa-print"></i> Print Receipt
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay">
+    <div class="spinner-border text-light" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    <h3 class="text-light mt-3">Processing Payments...</h3>
+    <p class="text-light">Please wait while we process your payments</p>
+</div>
+
+<script>
+let rowCount = 1;
+
+function addPaymentRow() {
+    rowCount++;
+    const container = document.getElementById('paymentsContainer');
+    const newRow = document.createElement('div');
+    newRow.className = 'payment-row';
+    newRow.id = `payment-row-${rowCount}`;
+
+    newRow.innerHTML = `
+        <div class="row">
+            <div class="col-md-4">
+                <label class="form-label">Select Supplier *</label>
+                <select class="form-control supplier-select" name="supplier_id[]" required>
+                    <option value="">-- Select Supplier --</option>
+                    {% for supplier in suppliers %}
+                    <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Service Description *</label>
+                <input type="text" class="form-control" name="service_description[]" placeholder="Enter service description" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Amount (₦) *</label>
+                <input type="number" class="form-control amount-input" name="amount[]" step="0.01" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Action</label><br>
+                <button type="button" class="btn btn-danger remove-row" onclick="removePaymentRow(${rowCount})">
+                    <i class="fas fa-trash"></i> Remove
+                </button>
+            </div>
+        </div>
+        <div class="row mt-2">
+            <div class="col-md-3">
+                <label class="form-label">Payment Method *</label>
+                <select class="form-control" name="payment_method[]" required>
+                    <option value="">-- Select --</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Cheque">Cheque</option>
+                    <option value="Mobile Money">Mobile Money</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Reference Number</label>
+                <input type="text" class="form-control" name="reference_number[]" placeholder="Transaction ID">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Payment Date</label>
+                <input type="date" class="form-control" name="payment_date[]" value="{{ now }}" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Notes</label>
+                <input type="text" class="form-control" name="notes[]" placeholder="Additional notes">
+            </div>
+        </div>
+    `;
+
+    container.appendChild(newRow);
+    updateTotalPayments();
+}
+
+function removePaymentRow(rowId) {
+    const row = document.getElementById(`payment-row-${rowId}`);
+    if (row && document.querySelectorAll('.payment-row').length > 1) {
+        row.remove();
+        updateTotalPayments();
+    } else {
+        alert("You must have at least one payment row!");
+    }
+}
+
+function updateTotalPayments() {
+    const paymentRows = document.querySelectorAll('.payment-row').length;
+    const submitBtn = document.querySelector('#multiPaymentForm button[type="submit"]');
+    if (submitBtn) {
+        submitBtn.innerHTML = `<i class="fas fa-check-circle"></i> Process All Payments (${paymentRows})`;
+    }
+}
+
+function viewReceipt(paymentId) {
+    fetch(`/get_receipt/${paymentId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('receiptContent').innerHTML = data.html;
+                new bootstrap.Modal(document.getElementById('receiptModal')).show();
+            } else {
+                alert('Error loading receipt');
+            }
+        });
+}
+
+function printReceipt() {
+    const printContent = document.getElementById('receiptContent').innerHTML;
+    const originalContent = document.body.innerHTML;
+    document.body.innerHTML = printContent;
+    window.print();
+    document.body.innerHTML = originalContent;
+    location.reload();
+}
+
+$(document).ready(function() {
+    updateTotalPayments();
+
+    $('#importPaymentsForm').on('submit', function() {
+        $('#loadingOverlay').css('display', 'flex');
+    });
+});
+</script>
+{% endblock %}

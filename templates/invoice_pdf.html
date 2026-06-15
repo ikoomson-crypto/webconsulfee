@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Invoice #{{ payment.reference_number or "%06d" % payment_id }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 40px;
+        }
+        .invoice-container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .invoice-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-radius: 10px 10px 0 0;
+        }
+        .invoice-title {
+            font-size: 32px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .invoice-number {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        .invoice-date {
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 10px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .section {
+            margin-bottom: 25px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 15px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 5px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .info-value {
+            color: #333;
+            font-size: 14px;
+        }
+        .invoice-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .invoice-table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .invoice-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .total-amount {
+            font-size: 24px;
+            color: #28a745;
+            font-weight: bold;
+        }
+        .bank-details {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .mt-2 {
+            margin-top: 10px;
+        }
+        @media print {
+            body {
+                padding: 0;
+            }
+        }
+    </style>
+    <script>
+        window.onload = function() {
+            window.print();
+        }
+    </script>
+</head>
+<body>
+    <div class="invoice-container">
+        <div class="invoice-header">
+            <div class="invoice-title">INVOICE</div>
+            <div class="invoice-number">Invoice #: {{ payment.reference_number or "%06d" % payment_id }}</div>
+            <div class="invoice-date">Date: {{ payment.payment_date }}</div>
+        </div>
+
+        <div class="content">
+            <div class="section">
+                <div class="section-title">Consultant Details</div>
+                <div class="info-grid">
+                    <div>
+                        <div class="info-label">Consultant Name</div>
+                        <div class="info-value">{{ payment.supplier_name }}</div>
+                        <div class="info-label mt-2">Address</div>
+                        <div class="info-value">{{ payment.address or 'N/A' }}</div>
+                        <div class="info-label mt-2">Telephone</div>
+                        <div class="info-value">{{ payment.telephone or 'N/A' }}</div>
+                    </div>
+                    <div>
+                        <div class="info-label">ID Type</div>
+                        <div class="info-value">{{ payment.id_type or 'N/A' }}</div>
+                        <div class="info-label mt-2">ID Number</div>
+                        <div class="info-value">{{ payment.id_number or 'N/A' }}</div>
+                        <div class="info-label mt-2">Street Address</div>
+                        <div class="info-value">{{ payment.street_address or 'N/A' }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Invoice Details</div>
+                <table class="invoice-table">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Amount (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>{{ payment.service_description }}</td>
+                            <td class="total-amount">${{ "{:,.2f}".format(payment.amount) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Bank Account Details</div>
+                <div class="bank-details">
+                    <div class="info-grid">
+                        <div>
+                            <div class="info-label">Bank Name</div>
+                            <div class="info-value">{{ payment.bank_name or 'N/A' }}</div>
+                            <div class="info-label mt-2">Account Name</div>
+                            <div class="info-value">{{ payment.account_name or 'N/A' }}</div>
+                        </div>
+                        <div>
+                            <div class="info-label">Account Number</div>
+                            <div class="info-value">{{ payment.account_number or 'N/A' }}</div>
+                            <div class="info-label mt-2">SWIFT Code</div>
+                            <div class="info-value">{{ payment.swift_code or 'N/A' }}</div>
+                        </div>
+                    </div>
+                    <div class="info-label mt-2">Bank Address</div>
+                    <div class="info-value">{{ payment.bank_address or 'N/A' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
