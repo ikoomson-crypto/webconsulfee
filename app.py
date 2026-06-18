@@ -1,6 +1,8 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, make_response
 import sqlite3
 import os
+import sys
+import platform
 from datetime import datetime, date
 from werkzeug.utils import secure_filename
 import csv
@@ -10,6 +12,8 @@ import openpyxl
 from openpyxl import Workbook
 import time
 import base64
+import zipfile
+import tempfile
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
@@ -29,6 +33,107 @@ ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg'}
 
 # Create logo upload directory
 os.makedirs(app.config['LOGO_UPLOAD_FOLDER'], exist_ok=True)
+
+# Environment detection
+IS_RENDER = os.environ.get('RENDER', False) or os.environ.get('RENDER_APP_NAME', False)
+IS_WINDOWS = platform.system() == 'Windows'
+
+print(f"🖥️ Running on: {'Render' if IS_RENDER else 'Local'}")
+print(f"💻 Platform: {platform.system()}")
+
+# Import PDF libraries based on environment
+PDF_LIBRARY = None
+pdf_config = None
+
+if IS_RENDER:
+    print("📦 Using WeasyPrint for PDF generation")
+    try:
+        from weasyprint import HTML
+
+        PDF_LIBRARY = 'weasyprint'
+        print("✅ WeasyPrint loaded successfully")
+    except ImportError as e:
+        print(f"⚠️ WeasyPrint import error: {e}")
+        PDF_LIBRARY = None
+else:
+    print("📦 Using pdfkit for PDF generation")
+    try:
+        import pdfkit
+
+        # Configure wkhtmltopdf path for Windows
+        WKHTMLTOPDF_PATH = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
+        if os.path.exists(WKHTMLTOPDF_PATH):
+            pdf_config = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_PATH)
+            print(f"✅ wkhtmltopdf found at: {WKHTMLTOPDF_PATH}")
+        else:
+            # Try alternative path
+            alt_path = r'C:\Program Files (x86)\wkhtmltopdf\bin\wkhtmltopdf.exe'
+            if os.path.exists(alt_path):
+                pdf_config = pdfkit.configuration(wkhtmltopdf=alt_path)
+                print(f"✅ wkhtmltopdf found at: {alt_path}")
+            else:
+                print(f"⚠️ wkhtmltopdf not found. Please install from: https://wkhtmltopdf.org/downloads.html")
+                pdf_config = None
+        PDF_LIBRARY = 'pdfkit'
+    except ImportError as e:
+        print(f"⚠️ pdfkit import error: {e}")
+        print("Run: pip install pdfkit")
+        PDF_LIBRARY = None
+
+
+def generate_pdf_from_html(html_content, output_path=None):
+    """Generate PDF from HTML content - works on both Render and Windows"""
+    try:
+        if PDF_LIBRARY == 'weasyprint' and IS_RENDER:
+            from weasyprint import HTML
+            if output_path:
+                HTML(string=html_content).write_pdf(output_path)
+                return output_path
+            else:
+                return HTML(string=html_content).write_pdf()
+        elif PDF_LIBRARY == 'pdfkit':
+            import pdfkit
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
+                f.write(html_content)
+                temp_html = f.name
+
+            if output_path:
+                pdfkit.from_file(temp_html, output_path, configuration=pdf_config, options={
+                    'page-size': 'A4',
+                    'encoding': 'UTF-8',
+                    'margin-top': '10mm',
+                    'margin-right': '10mm',
+                    'margin-bottom': '10mm',
+                    'margin-left': '10mm'
+                })
+                result = output_path
+            else:
+                temp_pdf = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
+                pdf_path = temp_pdf.name
+                temp_pdf.close()
+
+                pdfkit.from_file(temp_html, pdf_path, configuration=pdf_config, options={
+                    'page-size': 'A4',
+                    'encoding': 'UTF-8',
+                    'margin-top': '10mm',
+                    'margin-right': '10mm',
+                    'margin-bottom': '10mm',
+                    'margin-left': '10mm'
+                })
+
+                with open(pdf_path, 'rb') as f:
+                    pdf_data = f.read()
+
+                os.unlink(pdf_path)
+                result = pdf_data
+
+            os.unlink(temp_html)
+            return result
+        else:
+            raise Exception("No PDF library available")
+    except Exception as e:
+        print(f"PDF generation error: {e}")
+        raise
 
 
 def allowed_image_file(filename):
@@ -147,132 +252,6 @@ def init_db():
 init_db()
 
 
-# Company Settings Routes
-@app.route('/settings', methods=['GET', 'POST'])
-def settings():
-    """Company settings page"""
-    db = get_db()
-
-    if request.method == 'POST':
-        try:
-            # Get form data
-            company_name = request.form.get('company_name', '')
-            company_address = request.form.get('company_address', '')
-            company_phone = request.form.get('company_phone', '')
-            company_email = request.form.get('company_email', '')
-            company_website = request.form.get('company_website', '')
-            company_registration = request.form.get('company_registration', '')
-            currency_symbol = request.form.get('currency_symbol', '$')
-            currency_code = request.form.get('currency_code', 'USD')
-            tax_rate = float(request.form.get('tax_rate', 0))
-
-            # Check if settings exist
-            existing = db.execute('SELECT id FROM company_settings LIMIT 1').fetchone()
-
-            if existing:
-                # Update existing settings
-                db.execute('''UPDATE company_settings SET 
-                            company_name = ?,
-                            company_address = ?,
-                            company_phone = ?,
-                            company_email = ?,
-                            company_website = ?,
-                            company_registration = ?,
-                            currency_symbol = ?,
-                            currency_code = ?,
-                            tax_rate = ?,
-                            updated_date = CURRENT_TIMESTAMP
-                            WHERE id = ?''',
-                           (company_name, company_address, company_phone,
-                            company_email, company_website, company_registration,
-                            currency_symbol, currency_code, tax_rate, existing['id']))
-            else:
-                # Insert new settings
-                db.execute('''INSERT INTO company_settings 
-                            (company_name, company_address, company_phone, 
-                             company_email, company_website, company_registration,
-                             currency_symbol, currency_code, tax_rate)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                           (company_name, company_address, company_phone,
-                            company_email, company_website, company_registration,
-                            currency_symbol, currency_code, tax_rate))
-
-            db.commit()
-            flash('Company settings updated successfully!', 'success')
-
-        except Exception as e:
-            db.rollback()
-            flash(f'Error updating settings: {str(e)}', 'error')
-
-        finally:
-            db.close()
-
-        return redirect(url_for('settings'))
-
-    # GET - Display settings
-    settings_data = db.execute('SELECT * FROM company_settings LIMIT 1').fetchone()
-    db.close()
-
-    # Get current logo
-    logo_path = os.path.join('static/uploads/logos', 'company_logo.png')
-    logo_exists = os.path.exists(logo_path)
-
-    return render_template('settings.html',
-                           settings=settings_data,
-                           logo_exists=logo_exists)
-
-
-@app.route('/settings/logo', methods=['POST'])
-def upload_logo():
-    """Upload company logo"""
-    if 'logo' not in request.files:
-        flash('No file selected', 'error')
-        return redirect(url_for('settings'))
-
-    file = request.files['logo']
-    if file.filename == '':
-        flash('No file selected', 'error')
-        return redirect(url_for('settings'))
-
-    if not allowed_image_file(file.filename):
-        flash('Invalid file format. Please upload PNG, JPG, JPEG, GIF, or SVG', 'error')
-        return redirect(url_for('settings'))
-
-    try:
-        # Secure the filename
-        filename = 'company_logo.png'
-        filepath = os.path.join(app.config['LOGO_UPLOAD_FOLDER'], filename)
-
-        # Delete old logo if exists
-        if os.path.exists(filepath):
-            os.remove(filepath)
-
-        # Save new logo
-        file.save(filepath)
-        flash('Company logo uploaded successfully!', 'success')
-
-    except Exception as e:
-        flash(f'Error uploading logo: {str(e)}', 'error')
-
-    return redirect(url_for('settings'))
-
-
-@app.route('/settings/logo/remove', methods=['POST'])
-def remove_logo():
-    """Remove company logo"""
-    try:
-        logo_path = os.path.join(app.config['LOGO_UPLOAD_FOLDER'], 'company_logo.png')
-        if os.path.exists(logo_path):
-            os.remove(logo_path)
-            flash('Company logo removed successfully!', 'success')
-        else:
-            flash('No logo found to remove', 'warning')
-    except Exception as e:
-        flash(f'Error removing logo: {str(e)}', 'error')
-
-    return redirect(url_for('settings'))
-
-
 def get_company_settings():
     """Helper function to get company settings"""
     db = get_db()
@@ -318,13 +297,57 @@ def inject_company_settings():
     }
 
 
+def amount_in_words(amount):
+    """Convert numeric amount to words"""
+
+    def number_to_words(n):
+        ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine']
+        teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen',
+                 'Nineteen']
+        tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+
+        if n < 10:
+            return ones[int(n)]
+        elif n < 20:
+            return teens[int(n) - 10]
+        elif n < 100:
+            return tens[int(n // 10)] + (' ' + ones[int(n % 10)] if n % 10 != 0 else '')
+        elif n < 1000:
+            return ones[int(n // 100)] + ' Hundred' + (' ' + number_to_words(n % 100) if n % 100 != 0 else '')
+        elif n < 1000000:
+            return number_to_words(int(n // 1000)) + ' Thousand' + (
+                ' ' + number_to_words(n % 1000) if n % 1000 != 0 else '')
+        elif n < 1000000000:
+            return number_to_words(int(n // 1000000)) + ' Million' + (
+                ' ' + number_to_words(n % 1000000) if n % 1000000 != 0 else '')
+        else:
+            return str(n)
+
+    dollars = int(amount)
+    cents = int(round((amount - dollars) * 100))
+
+    if dollars == 0 and cents == 0:
+        return "Zero"
+
+    words = number_to_words(dollars)
+    if cents > 0:
+        words += f" and {cents:02d}/100"
+
+    return words
+
+
+# Register the filters with Jinja2
+app.jinja_env.globals.update(amount_in_words=amount_in_words)
+
+
 @app.route('/')
 def index():
     db = get_db()
     suppliers_count = db.execute('SELECT COUNT(*) as count FROM suppliers').fetchone()['count']
     payments_count = db.execute('SELECT COUNT(*) as count FROM payments').fetchone()['count']
     total_amount = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments').fetchone()['total']
-    pending_amount = db.execute('SELECT COALESCE(SUM(total), 0) as total FROM services WHERE status = "Pending"').fetchone()['total']
+    pending_amount = \
+    db.execute('SELECT COALESCE(SUM(total), 0) as total FROM services WHERE status = "Pending"').fetchone()['total']
     db.close()
 
     return render_template('index.html',
@@ -333,6 +356,122 @@ def index():
                            total_amount=f"{total_amount:,.0f}",
                            pending_amount=f"{pending_amount:,.0f}",
                            now=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
+
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    """Company settings page"""
+    db = get_db()
+
+    if request.method == 'POST':
+        try:
+            company_name = request.form.get('company_name', '')
+            company_address = request.form.get('company_address', '')
+            company_phone = request.form.get('company_phone', '')
+            company_email = request.form.get('company_email', '')
+            company_website = request.form.get('company_website', '')
+            company_registration = request.form.get('company_registration', '')
+            currency_symbol = request.form.get('currency_symbol', '$')
+            currency_code = request.form.get('currency_code', 'USD')
+            tax_rate = float(request.form.get('tax_rate', 0))
+
+            existing = db.execute('SELECT id FROM company_settings LIMIT 1').fetchone()
+
+            if existing:
+                db.execute('''UPDATE company_settings SET 
+                            company_name = ?,
+                            company_address = ?,
+                            company_phone = ?,
+                            company_email = ?,
+                            company_website = ?,
+                            company_registration = ?,
+                            currency_symbol = ?,
+                            currency_code = ?,
+                            tax_rate = ?,
+                            updated_date = CURRENT_TIMESTAMP
+                            WHERE id = ?''',
+                           (company_name, company_address, company_phone,
+                            company_email, company_website, company_registration,
+                            currency_symbol, currency_code, tax_rate, existing['id']))
+            else:
+                db.execute('''INSERT INTO company_settings 
+                            (company_name, company_address, company_phone, 
+                             company_email, company_website, company_registration,
+                             currency_symbol, currency_code, tax_rate)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                           (company_name, company_address, company_phone,
+                            company_email, company_website, company_registration,
+                            currency_symbol, currency_code, tax_rate))
+
+            db.commit()
+            flash('Company settings updated successfully!', 'success')
+
+        except Exception as e:
+            db.rollback()
+            flash(f'Error updating settings: {str(e)}', 'error')
+
+        finally:
+            db.close()
+
+        return redirect(url_for('settings'))
+
+    settings_data = db.execute('SELECT * FROM company_settings LIMIT 1').fetchone()
+    db.close()
+
+    logo_path = os.path.join('static/uploads/logos', 'company_logo.png')
+    logo_exists = os.path.exists(logo_path)
+
+    return render_template('settings.html',
+                           settings=settings_data,
+                           logo_exists=logo_exists)
+
+
+@app.route('/settings/logo', methods=['POST'])
+def upload_logo():
+    """Upload company logo"""
+    if 'logo' not in request.files:
+        flash('No file selected', 'error')
+        return redirect(url_for('settings'))
+
+    file = request.files['logo']
+    if file.filename == '':
+        flash('No file selected', 'error')
+        return redirect(url_for('settings'))
+
+    if not allowed_image_file(file.filename):
+        flash('Invalid file format. Please upload PNG, JPG, JPEG, GIF, or SVG', 'error')
+        return redirect(url_for('settings'))
+
+    try:
+        filename = 'company_logo.png'
+        filepath = os.path.join(app.config['LOGO_UPLOAD_FOLDER'], filename)
+
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        file.save(filepath)
+        flash('Company logo uploaded successfully!', 'success')
+
+    except Exception as e:
+        flash(f'Error uploading logo: {str(e)}', 'error')
+
+    return redirect(url_for('settings'))
+
+
+@app.route('/settings/logo/remove', methods=['POST'])
+def remove_logo():
+    """Remove company logo"""
+    try:
+        logo_path = os.path.join(app.config['LOGO_UPLOAD_FOLDER'], 'company_logo.png')
+        if os.path.exists(logo_path):
+            os.remove(logo_path)
+            flash('Company logo removed successfully!', 'success')
+        else:
+            flash('No logo found to remove', 'warning')
+    except Exception as e:
+        flash(f'Error removing logo: {str(e)}', 'error')
+
+    return redirect(url_for('settings'))
 
 
 @app.route('/suppliers', methods=['GET', 'POST'])
@@ -644,7 +783,6 @@ def update_supplier():
     except Exception as e:
         db.rollback()
         flash(f'Error updating supplier: {str(e)}', 'error')
-        print(f"Update error: {str(e)}")
 
     finally:
         db.close()
@@ -675,7 +813,8 @@ def payments():
     ''').fetchall()
 
     total_paid = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments').fetchone()['total']
-    pending_amount = db.execute('SELECT COALESCE(SUM(total), 0) as total FROM services WHERE status = "Pending"').fetchone()['total']
+    pending_amount = \
+    db.execute('SELECT COALESCE(SUM(total), 0) as total FROM services WHERE status = "Pending"').fetchone()['total']
 
     db.close()
 
@@ -722,7 +861,8 @@ def process_multiple_payments():
                                         (supplier_ids[i], service_description, amount, 'Pending'))
                     service_id = cursor.lastrowid
 
-                payment_date = payment_dates[i] if i < len(payment_dates) and payment_dates[i] else date.today().isoformat()
+                payment_date = payment_dates[i] if i < len(payment_dates) and payment_dates[
+                    i] else date.today().isoformat()
                 reference_number = reference_numbers[i] if i < len(reference_numbers) else ''
                 notes = notes_list[i] if i < len(notes_list) else ''
 
@@ -961,7 +1101,8 @@ def import_payments_excel():
         for idx, row in enumerate(data, start=2):
             try:
                 supplier_name = str(row.get('Supplier Name', '') or row.get('supplier name', '') or '').strip()
-                service_description = str(row.get('Service Description', '') or row.get('service description', '') or '').strip()
+                service_description = str(
+                    row.get('Service Description', '') or row.get('service description', '') or '').strip()
                 amount = row.get('Amount', 0) or row.get('amount', 0)
                 payment_method = str(row.get('Payment Method', '') or row.get('payment method', '') or '').strip()
                 reference_number = str(row.get('Reference Number', '') or row.get('reference number', '') or '').strip()
@@ -989,7 +1130,8 @@ def import_payments_excel():
                     failed += 1
                     continue
 
-                supplier = db.execute('SELECT id FROM suppliers WHERE LOWER(name) LIKE LOWER(?)', (f'%{supplier_name}%',)).fetchone()
+                supplier = db.execute('SELECT id FROM suppliers WHERE LOWER(name) LIKE LOWER(?)',
+                                      (f'%{supplier_name}%',)).fetchone()
                 if not supplier:
                     errors.append(f"Row {idx}: Supplier '{supplier_name}' not found")
                     failed += 1
@@ -1096,7 +1238,9 @@ def payment_history():
     suppliers_list = [dict(supplier) for supplier in suppliers]
 
     total_paid = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments').fetchone()['total']
-    monthly_total = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE strftime("%Y-%m", payment_date) = strftime("%Y-%m", "now")').fetchone()['total']
+    monthly_total = db.execute(
+        'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE strftime("%Y-%m", payment_date) = strftime("%Y-%m", "now")').fetchone()[
+        'total']
     unique_suppliers = db.execute('SELECT COUNT(DISTINCT supplier_id) as count FROM payments').fetchone()['count']
 
     db.close()
@@ -1156,6 +1300,112 @@ def export_all_payments_html():
                            now=datetime.now())
 
 
+# ============ PDF GENERATION ROUTES ============
+
+@app.route('/export_invoice_pdf/<int:payment_id>')
+def export_invoice_pdf(payment_id):
+    """Export single invoice as PDF"""
+    db = get_db()
+
+    payment = db.execute('''
+        SELECT p.*, s.name as supplier_name, s.address, s.telephone,
+               s.bank_name, s.account_name, s.account_number, s.swift_code,
+               s.bank_address, s.id_type, s.id_number, s.street_address,
+               sv.service_description, sv.total
+        FROM payments p
+        JOIN suppliers s ON p.supplier_id = s.id
+        JOIN services sv ON p.service_id = sv.id
+        WHERE p.id = ?
+    ''', (payment_id,)).fetchone()
+
+    db.close()
+
+    if not payment:
+        flash('Payment not found', 'error')
+        return redirect(url_for('payment_history'))
+
+    html_content = render_template('invoice_pdf.html', payment=payment, payment_id=payment_id)
+
+    try:
+        pdf_data = generate_pdf_from_html(html_content)
+        response = make_response(pdf_data)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers[
+            'Content-Disposition'] = f'attachment; filename=invoice_{payment_id}_{payment["supplier_name"]}.pdf'
+        return response
+
+    except Exception as e:
+        flash(f'Error generating PDF: {str(e)}', 'error')
+        return redirect(url_for('payment_history'))
+
+
+@app.route('/bulk_invoice_pdf', methods=['POST'])
+def bulk_invoice_pdf():
+    """Generate multiple invoices as PDF (zip file)"""
+    payment_ids = request.form.getlist('payment_ids[]')
+
+    if not payment_ids:
+        flash('No payments selected', 'error')
+        return redirect(url_for('payment_history'))
+
+    db = get_db()
+    payments = []
+
+    for pid in payment_ids:
+        payment = db.execute('''
+            SELECT p.*, s.name as supplier_name, s.address, s.telephone,
+                   s.bank_name, s.account_name, s.account_number, s.swift_code,
+                   s.bank_address, s.id_type, s.id_number, s.street_address,
+                   sv.service_description, sv.total
+            FROM payments p
+            JOIN suppliers s ON p.supplier_id = s.id
+            JOIN services sv ON p.service_id = sv.id
+            WHERE p.id = ?
+        ''', (pid,)).fetchone()
+        if payment:
+            payments.append(payment)
+
+    db.close()
+
+    if not payments:
+        flash('No invoices found', 'error')
+        return redirect(url_for('payment_history'))
+
+    try:
+        temp_dir = tempfile.mkdtemp()
+        pdf_files = []
+
+        for payment in payments:
+            html_content = render_template('invoice_pdf.html',
+                                           payment=payment,
+                                           payment_id=payment['id'])
+
+            pdf_filename = f"invoice_{payment['id']}_{payment['supplier_name'].replace(' ', '_')}.pdf"
+            pdf_path = os.path.join(temp_dir, pdf_filename)
+
+            generate_pdf_from_html(html_content, pdf_path)
+            pdf_files.append(pdf_path)
+
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for pdf_path in pdf_files:
+                zip_file.write(pdf_path, os.path.basename(pdf_path))
+                os.unlink(pdf_path)
+
+        os.rmdir(temp_dir)
+
+        zip_buffer.seek(0)
+        response = make_response(zip_buffer.getvalue())
+        response.headers['Content-Type'] = 'application/zip'
+        response.headers[
+            'Content-Disposition'] = f'attachment; filename=invoices_{datetime.now().strftime("%Y%m%d")}.zip'
+        return response
+
+    except Exception as e:
+        flash(f'Error generating invoices: {str(e)}', 'error')
+        return redirect(url_for('payment_history'))
+
+
 @app.route('/payslip/<int:payment_id>')
 def payslip(payment_id):
     """Generate payslip report for a payment"""
@@ -1178,7 +1428,6 @@ def payslip(payment_id):
         flash('Payment not found', 'error')
         return redirect(url_for('payment_history'))
 
-    # Format payment period (e.g., "June 2026")
     payment_period = 'N/A'
     if payment['payment_date']:
         try:
@@ -1228,7 +1477,6 @@ def payslip_pdf(payment_id):
         flash('Payment not found', 'error')
         return redirect(url_for('payment_history'))
 
-    # Format payment period
     payment_period = 'N/A'
     if payment['payment_date']:
         try:
@@ -1237,52 +1485,18 @@ def payslip_pdf(payment_id):
         except:
             payment_period = payment['payment_date']
 
-    # Render the payslip HTML
     html_content = render_template('payslip_pdf.html',
                                    payment=payment,
                                    payment_id=payment_id,
                                    now=datetime.now(),
                                    payment_period=payment_period)
 
-    # Generate PDF using pdfkit
     try:
-        import pdfkit
-        import tempfile
-
-        # Configure pdfkit
-        wkhtmltopdf_path = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
-        config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
-
-        # Create temporary HTML file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-            f.write(html_content)
-            temp_html = f.name
-
-        # Create temporary PDF file
-        pdf_path = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False).name
-
-        # Convert HTML to PDF
-        pdfkit.from_file(temp_html, pdf_path, configuration=config, options={
-            'page-size': 'A4',
-            'encoding': 'UTF-8',
-            'margin-top': '10mm',
-            'margin-right': '10mm',
-            'margin-bottom': '10mm',
-            'margin-left': '10mm'
-        })
-
-        # Read the PDF file
-        with open(pdf_path, 'rb') as f:
-            pdf_data = f.read()
-
-        # Clean up temporary files
-        os.unlink(temp_html)
-        os.unlink(pdf_path)
-
-        # Send PDF as download
+        pdf_data = generate_pdf_from_html(html_content)
         response = make_response(pdf_data)
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename=payslip_{payment_id}_{payment["supplier_name"]}.pdf'
+        response.headers[
+            'Content-Disposition'] = f'attachment; filename=payslip_{payment_id}_{payment["supplier_name"]}.pdf'
         return response
 
     except Exception as e:
@@ -1307,26 +1521,19 @@ def payslip_list():
     pay_periods_set = set()
 
     for payment in payments_data:
-        # Format pay period (e.g., "June 2026")
         pay_period = 'N/A'
         if payment['payment_date']:
             try:
-                # Handle different date formats
                 payment_date_str = payment['payment_date']
                 if ' ' in payment_date_str:
-                    # If it has time component, split it
                     payment_date_str = payment_date_str.split(' ')[0]
-
-                # Try to parse the date
                 payment_date = datetime.strptime(payment_date_str, '%Y-%m-%d')
                 pay_period = payment_date.strftime('%B %Y')
             except:
                 try:
-                    # Try alternative format
                     payment_date = datetime.strptime(str(payment['payment_date']), '%Y-%m-%d %H:%M:%S')
                     pay_period = payment_date.strftime('%B %Y')
                 except:
-                    # If all fails, use the raw value
                     pay_period = str(payment['payment_date'])[:7] if payment['payment_date'] else 'N/A'
 
         pay_periods_set.add(pay_period)
@@ -1343,7 +1550,6 @@ def payslip_list():
             'supplier_id': payment['supplier_id']
         })
 
-    # Get suppliers for filter
     suppliers = db.execute('SELECT id, name FROM suppliers ORDER BY name').fetchall()
     suppliers_list = [dict(supplier) for supplier in suppliers]
 
@@ -1355,7 +1561,6 @@ def payslip_list():
 
     db.close()
 
-    # Sort pay periods chronologically
     def parse_pay_period(period):
         if period == 'N/A':
             return datetime(1900, 1, 1)
@@ -1378,9 +1583,6 @@ def payslip_list():
 @app.route('/bulk_payslip_pdf', methods=['POST'])
 def bulk_payslip_pdf():
     """Generate multiple payslips as PDF (zip file)"""
-    import zipfile
-    import tempfile
-
     payment_ids = request.form.getlist('payment_ids[]')
 
     if not payment_ids:
@@ -1411,19 +1613,10 @@ def bulk_payslip_pdf():
         return redirect(url_for('payslip_list'))
 
     try:
-        import pdfkit
-        import tempfile
-
-        # Configure pdfkit
-        wkhtmltopdf_path = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
-        config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
-
-        # Create temporary directory for PDFs
         temp_dir = tempfile.mkdtemp()
         pdf_files = []
 
         for payment in payments:
-            # Format payment period
             payment_period = 'N/A'
             if payment['payment_date']:
                 try:
@@ -1432,47 +1625,26 @@ def bulk_payslip_pdf():
                 except:
                     payment_period = payment['payment_date']
 
-            # Render HTML for each payslip
             html_content = render_template('payslip_pdf.html',
                                            payment=payment,
                                            payment_id=payment['id'],
                                            now=datetime.now(),
                                            payment_period=payment_period)
 
-            # Generate PDF for each payslip
             pdf_filename = f"payslip_{payment['id']}_{payment['supplier_name'].replace(' ', '_')}.pdf"
             pdf_path = os.path.join(temp_dir, pdf_filename)
 
-            # Create temporary HTML file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-                f.write(html_content)
-                temp_html = f.name
-
-            # Convert HTML to PDF
-            pdfkit.from_file(temp_html, pdf_path, configuration=config, options={
-                'page-size': 'A4',
-                'encoding': 'UTF-8',
-                'margin-top': '10mm',
-                'margin-right': '10mm',
-                'margin-bottom': '10mm',
-                'margin-left': '10mm'
-            })
-
-            # Clean up temporary HTML
-            os.unlink(temp_html)
+            generate_pdf_from_html(html_content, pdf_path)
             pdf_files.append(pdf_path)
 
-        # Create ZIP file
         zip_buffer = BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             for pdf_path in pdf_files:
                 zip_file.write(pdf_path, os.path.basename(pdf_path))
                 os.unlink(pdf_path)
 
-        # Clean up temporary directory
         os.rmdir(temp_dir)
 
-        # Send ZIP file
         zip_buffer.seek(0)
         response = make_response(zip_buffer.getvalue())
         response.headers['Content-Type'] = 'application/zip'
@@ -1484,167 +1656,6 @@ def bulk_payslip_pdf():
         flash(f'Error generating payslips: {str(e)}', 'error')
         return redirect(url_for('payslip_list'))
 
-
-@app.route('/bulk_invoice_pdf', methods=['POST'])
-def bulk_invoice_pdf():
-    """Generate multiple invoices as PDF (zip file)"""
-    import zipfile
-    import tempfile
-
-    payment_ids = request.form.getlist('payment_ids[]')
-
-    if not payment_ids:
-        flash('No payments selected', 'error')
-        return redirect(url_for('payment_history'))
-
-    db = get_db()
-    payments = []
-
-    for pid in payment_ids:
-        payment = db.execute('''
-            SELECT p.*, s.name as supplier_name, s.address, s.telephone,
-                   s.bank_name, s.account_name, s.account_number, s.swift_code,
-                   s.bank_address, s.id_type, s.id_number, s.street_address,
-                   sv.service_description, sv.total
-            FROM payments p
-            JOIN suppliers s ON p.supplier_id = s.id
-            JOIN services sv ON p.service_id = sv.id
-            WHERE p.id = ?
-        ''', (pid,)).fetchone()
-        if payment:
-            payments.append(payment)
-
-    db.close()
-
-    if not payments:
-        flash('No invoices found', 'error')
-        return redirect(url_for('payment_history'))
-
-    try:
-        import pdfkit
-        import tempfile
-
-        # Configure pdfkit
-        wkhtmltopdf_path = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
-        config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
-
-        # Create temporary directory for PDFs
-        temp_dir = tempfile.mkdtemp()
-        pdf_files = []
-
-        for payment in payments:
-            # Render HTML for each invoice
-            html_content = render_template('invoice_pdf.html',
-                                           payment=payment,
-                                           payment_id=payment['id'])
-
-            # Generate PDF for each invoice
-            pdf_filename = f"invoice_{payment['id']}_{payment['supplier_name'].replace(' ', '_')}.pdf"
-            pdf_path = os.path.join(temp_dir, pdf_filename)
-
-            # Create temporary HTML file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
-                f.write(html_content)
-                temp_html = f.name
-
-            # Convert HTML to PDF
-            pdfkit.from_file(temp_html, pdf_path, configuration=config, options={
-                'page-size': 'A4',
-                'encoding': 'UTF-8',
-                'margin-top': '10mm',
-                'margin-right': '10mm',
-                'margin-bottom': '10mm',
-                'margin-left': '10mm'
-            })
-
-            # Clean up temporary HTML
-            os.unlink(temp_html)
-            pdf_files.append(pdf_path)
-
-        # Create ZIP file
-        zip_buffer = BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            for pdf_path in pdf_files:
-                zip_file.write(pdf_path, os.path.basename(pdf_path))
-                os.unlink(pdf_path)
-
-        # Clean up temporary directory
-        os.rmdir(temp_dir)
-
-        # Send ZIP file
-        zip_buffer.seek(0)
-        response = make_response(zip_buffer.getvalue())
-        response.headers['Content-Type'] = 'application/zip'
-        response.headers[
-            'Content-Disposition'] = f'attachment; filename=invoices_{datetime.now().strftime("%Y%m%d")}.zip'
-        return response
-
-    except Exception as e:
-        flash(f'Error generating invoices: {str(e)}', 'error')
-        return redirect(url_for('payment_history'))
-
-@app.route('/export_invoice_pdf/<int:payment_id>')
-def export_invoice_pdf(payment_id):
-    """Export single invoice as PDF using browser print"""
-    db = get_db()
-
-    payment = db.execute('''
-        SELECT p.*, s.name as supplier_name, s.address, s.telephone,
-               s.bank_name, s.account_name, s.account_number, s.swift_code,
-               s.bank_address, s.id_type, s.id_number, s.street_address,
-               sv.service_description, sv.total
-        FROM payments p
-        JOIN suppliers s ON p.supplier_id = s.id
-        JOIN services sv ON p.service_id = sv.id
-        WHERE p.id = ?
-    ''', (payment_id,)).fetchone()
-
-    db.close()
-
-    if not payment:
-        flash('Payment not found', 'error')
-        return redirect(url_for('payment_history'))
-
-    return render_template('invoice_pdf.html', payment=payment, payment_id=payment_id)
-
-
-def amount_in_words(amount):
-    """Convert numeric amount to words"""
-    def number_to_words(n):
-        ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine']
-        teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
-        tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
-
-        if n < 10:
-            return ones[int(n)]
-        elif n < 20:
-            return teens[int(n) - 10]
-        elif n < 100:
-            return tens[int(n // 10)] + (' ' + ones[int(n % 10)] if n % 10 != 0 else '')
-        elif n < 1000:
-            return ones[int(n // 100)] + ' Hundred' + (' ' + number_to_words(n % 100) if n % 100 != 0 else '')
-        elif n < 1000000:
-            return number_to_words(int(n // 1000)) + ' Thousand' + (' ' + number_to_words(n % 1000) if n % 1000 != 0 else '')
-        elif n < 1000000000:
-            return number_to_words(int(n // 1000000)) + ' Million' + (' ' + number_to_words(n % 1000000) if n % 1000000 != 0 else '')
-        else:
-            return str(n)
-
-    dollars = int(amount)
-    cents = int(round((amount - dollars) * 100))
-
-    if dollars == 0 and cents == 0:
-        return "Zero"
-
-    words = number_to_words(dollars)
-    if cents > 0:
-        words += f" and {cents:02d}/100"
-
-    return words
-
-
-# Register the filters with Jinja2
-app.jinja_env.globals.update(amount_in_words=amount_in_words)
 
 if __name__ == '__main__':
     app.run(debug=True)
