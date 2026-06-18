@@ -49,7 +49,6 @@ if IS_RENDER:
     print("📦 Using WeasyPrint for PDF generation")
     try:
         from weasyprint import HTML
-
         PDF_LIBRARY = 'weasyprint'
         print("✅ WeasyPrint loaded successfully")
     except ImportError as e:
@@ -59,7 +58,6 @@ else:
     print("📦 Using pdfkit for PDF generation")
     try:
         import pdfkit
-
         # Configure wkhtmltopdf path for Windows
         WKHTMLTOPDF_PATH = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
         if os.path.exists(WKHTMLTOPDF_PATH):
@@ -86,6 +84,7 @@ def generate_pdf_from_html(html_content, output_path=None):
     try:
         if PDF_LIBRARY == 'weasyprint' and IS_RENDER:
             from weasyprint import HTML
+            # The correct way to instantiate WeasyPrint HTML is with string= parameter
             if output_path:
                 HTML(string=html_content).write_pdf(output_path)
                 return output_path
@@ -130,7 +129,7 @@ def generate_pdf_from_html(html_content, output_path=None):
             os.unlink(temp_html)
             return result
         else:
-            raise Exception("No PDF library available")
+            raise Exception(f"No PDF library available. PDF_LIBRARY: {PDF_LIBRARY}, IS_RENDER: {IS_RENDER}")
     except Exception as e:
         print(f"PDF generation error: {e}")
         raise
@@ -299,11 +298,9 @@ def inject_company_settings():
 
 def amount_in_words(amount):
     """Convert numeric amount to words"""
-
     def number_to_words(n):
         ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine']
-        teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen',
-                 'Nineteen']
+        teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
         tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
 
         if n < 10:
@@ -315,11 +312,9 @@ def amount_in_words(amount):
         elif n < 1000:
             return ones[int(n // 100)] + ' Hundred' + (' ' + number_to_words(n % 100) if n % 100 != 0 else '')
         elif n < 1000000:
-            return number_to_words(int(n // 1000)) + ' Thousand' + (
-                ' ' + number_to_words(n % 1000) if n % 1000 != 0 else '')
+            return number_to_words(int(n // 1000)) + ' Thousand' + (' ' + number_to_words(n % 1000) if n % 1000 != 0 else '')
         elif n < 1000000000:
-            return number_to_words(int(n // 1000000)) + ' Million' + (
-                ' ' + number_to_words(n % 1000000) if n % 1000000 != 0 else '')
+            return number_to_words(int(n // 1000000)) + ' Million' + (' ' + number_to_words(n % 1000000) if n % 1000000 != 0 else '')
         else:
             return str(n)
 
@@ -346,8 +341,7 @@ def index():
     suppliers_count = db.execute('SELECT COUNT(*) as count FROM suppliers').fetchone()['count']
     payments_count = db.execute('SELECT COUNT(*) as count FROM payments').fetchone()['count']
     total_amount = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments').fetchone()['total']
-    pending_amount = \
-    db.execute('SELECT COALESCE(SUM(total), 0) as total FROM services WHERE status = "Pending"').fetchone()['total']
+    pending_amount = db.execute('SELECT COALESCE(SUM(total), 0) as total FROM services WHERE status = "Pending"').fetchone()['total']
     db.close()
 
     return render_template('index.html',
@@ -813,8 +807,7 @@ def payments():
     ''').fetchall()
 
     total_paid = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments').fetchone()['total']
-    pending_amount = \
-    db.execute('SELECT COALESCE(SUM(total), 0) as total FROM services WHERE status = "Pending"').fetchone()['total']
+    pending_amount = db.execute('SELECT COALESCE(SUM(total), 0) as total FROM services WHERE status = "Pending"').fetchone()['total']
 
     db.close()
 
@@ -861,8 +854,7 @@ def process_multiple_payments():
                                         (supplier_ids[i], service_description, amount, 'Pending'))
                     service_id = cursor.lastrowid
 
-                payment_date = payment_dates[i] if i < len(payment_dates) and payment_dates[
-                    i] else date.today().isoformat()
+                payment_date = payment_dates[i] if i < len(payment_dates) and payment_dates[i] else date.today().isoformat()
                 reference_number = reference_numbers[i] if i < len(reference_numbers) else ''
                 notes = notes_list[i] if i < len(notes_list) else ''
 
@@ -1101,8 +1093,7 @@ def import_payments_excel():
         for idx, row in enumerate(data, start=2):
             try:
                 supplier_name = str(row.get('Supplier Name', '') or row.get('supplier name', '') or '').strip()
-                service_description = str(
-                    row.get('Service Description', '') or row.get('service description', '') or '').strip()
+                service_description = str(row.get('Service Description', '') or row.get('service description', '') or '').strip()
                 amount = row.get('Amount', 0) or row.get('amount', 0)
                 payment_method = str(row.get('Payment Method', '') or row.get('payment method', '') or '').strip()
                 reference_number = str(row.get('Reference Number', '') or row.get('reference number', '') or '').strip()
@@ -1130,8 +1121,7 @@ def import_payments_excel():
                     failed += 1
                     continue
 
-                supplier = db.execute('SELECT id FROM suppliers WHERE LOWER(name) LIKE LOWER(?)',
-                                      (f'%{supplier_name}%',)).fetchone()
+                supplier = db.execute('SELECT id FROM suppliers WHERE LOWER(name) LIKE LOWER(?)', (f'%{supplier_name}%',)).fetchone()
                 if not supplier:
                     errors.append(f"Row {idx}: Supplier '{supplier_name}' not found")
                     failed += 1
@@ -1238,9 +1228,7 @@ def payment_history():
     suppliers_list = [dict(supplier) for supplier in suppliers]
 
     total_paid = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments').fetchone()['total']
-    monthly_total = db.execute(
-        'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE strftime("%Y-%m", payment_date) = strftime("%Y-%m", "now")').fetchone()[
-        'total']
+    monthly_total = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE strftime("%Y-%m", payment_date) = strftime("%Y-%m", "now")').fetchone()['total']
     unique_suppliers = db.execute('SELECT COUNT(DISTINCT supplier_id) as count FROM payments').fetchone()['count']
 
     db.close()
@@ -1330,8 +1318,7 @@ def export_invoice_pdf(payment_id):
         pdf_data = generate_pdf_from_html(html_content)
         response = make_response(pdf_data)
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers[
-            'Content-Disposition'] = f'attachment; filename=invoice_{payment_id}_{payment["supplier_name"]}.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=invoice_{payment_id}_{payment["supplier_name"]}.pdf'
         return response
 
     except Exception as e:
@@ -1377,8 +1364,8 @@ def bulk_invoice_pdf():
 
         for payment in payments:
             html_content = render_template('invoice_pdf.html',
-                                           payment=payment,
-                                           payment_id=payment['id'])
+                                         payment=payment,
+                                         payment_id=payment['id'])
 
             pdf_filename = f"invoice_{payment['id']}_{payment['supplier_name'].replace(' ', '_')}.pdf"
             pdf_path = os.path.join(temp_dir, pdf_filename)
@@ -1397,8 +1384,7 @@ def bulk_invoice_pdf():
         zip_buffer.seek(0)
         response = make_response(zip_buffer.getvalue())
         response.headers['Content-Type'] = 'application/zip'
-        response.headers[
-            'Content-Disposition'] = f'attachment; filename=invoices_{datetime.now().strftime("%Y%m%d")}.zip'
+        response.headers['Content-Disposition'] = f'attachment; filename=invoices_{datetime.now().strftime("%Y%m%d")}.zip'
         return response
 
     except Exception as e:
@@ -1495,8 +1481,7 @@ def payslip_pdf(payment_id):
         pdf_data = generate_pdf_from_html(html_content)
         response = make_response(pdf_data)
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers[
-            'Content-Disposition'] = f'attachment; filename=payslip_{payment_id}_{payment["supplier_name"]}.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename=payslip_{payment_id}_{payment["supplier_name"]}.pdf'
         return response
 
     except Exception as e:
@@ -1554,9 +1539,7 @@ def payslip_list():
     suppliers_list = [dict(supplier) for supplier in suppliers]
 
     total_amount = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments').fetchone()['total']
-    monthly_total = db.execute(
-        'SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE strftime("%Y-%m", payment_date) = strftime("%Y-%m", "now")').fetchone()[
-        'total']
+    monthly_total = db.execute('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE strftime("%Y-%m", payment_date) = strftime("%Y-%m", "now")').fetchone()['total']
     unique_suppliers = db.execute('SELECT COUNT(DISTINCT supplier_id) as count FROM payments').fetchone()['count']
 
     db.close()
@@ -1626,10 +1609,10 @@ def bulk_payslip_pdf():
                     payment_period = payment['payment_date']
 
             html_content = render_template('payslip_pdf.html',
-                                           payment=payment,
-                                           payment_id=payment['id'],
-                                           now=datetime.now(),
-                                           payment_period=payment_period)
+                                         payment=payment,
+                                         payment_id=payment['id'],
+                                         now=datetime.now(),
+                                         payment_period=payment_period)
 
             pdf_filename = f"payslip_{payment['id']}_{payment['supplier_name'].replace(' ', '_')}.pdf"
             pdf_path = os.path.join(temp_dir, pdf_filename)
@@ -1648,8 +1631,7 @@ def bulk_payslip_pdf():
         zip_buffer.seek(0)
         response = make_response(zip_buffer.getvalue())
         response.headers['Content-Type'] = 'application/zip'
-        response.headers[
-            'Content-Disposition'] = f'attachment; filename=payslips_{datetime.now().strftime("%Y%m%d")}.zip'
+        response.headers['Content-Disposition'] = f'attachment; filename=payslips_{datetime.now().strftime("%Y%m%d")}.zip'
         return response
 
     except Exception as e:
