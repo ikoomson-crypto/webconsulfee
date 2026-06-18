@@ -29,3 +29,4 @@ webencodings==0.5.1
 Werkzeug==2.3.7
 wheel==0.47.0
 zopfli==0.4.3
+pdfkit==1.0.0
