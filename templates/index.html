@@ -1,34 +1,60 @@
 {% extends "base.html" %}
 
 {% block content %}
+<style>
+    .dashboard-card {
+        transition: transform 0.3s;
+        cursor: pointer;
+    }
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+    }
+    .icon-circle {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        margin-bottom: 15px;
+    }
+</style>
+
 <div class="row">
     <div class="col-md-4 mb-4">
-        <div class="card text-white bg-gradient-primary" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+        <div class="card text-white bg-gradient-primary dashboard-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
             <div class="card-body">
-                <i class="fas fa-truck fa-3x mb-3"></i>
+                <div class="icon-circle bg-white bg-opacity-25">
+                    <i class="fas fa-truck text-white"></i>
+                </div>
                 <h5 class="card-title">Total Suppliers</h5>
                 <h2 class="display-4">{{ suppliers_count }}</h2>
-                <a href="{{ url_for('suppliers') }}" class="text-white">Manage Suppliers →</a>
+                <a href="{{ url_for('suppliers') }}" class="text-white text-decoration-none">Manage Suppliers <i class="fas fa-arrow-right"></i></a>
             </div>
         </div>
     </div>
     <div class="col-md-4 mb-4">
-        <div class="card text-white bg-success">
+        <div class="card text-white bg-success dashboard-card">
             <div class="card-body">
-                <i class="fas fa-credit-card fa-3x mb-3"></i>
+                <div class="icon-circle bg-white bg-opacity-25">
+                    <i class="fas fa-credit-card text-white"></i>
+                </div>
                 <h5 class="card-title">Total Payments</h5>
                 <h2 class="display-4">{{ payments_count }}</h2>
-                <a href="{{ url_for('payments') }}" class="text-white">Process Payments →</a>
+                <a href="{{ url_for('payments') }}" class="text-white text-decoration-none">Process Payments <i class="fas fa-arrow-right"></i></a>
             </div>
         </div>
     </div>
     <div class="col-md-4 mb-4">
-        <div class="card text-white bg-info">
+        <div class="card text-white bg-info dashboard-card">
             <div class="card-body">
-                <i class="fas fa-money-bill-wave fa-3x mb-3"></i>
+                <div class="icon-circle bg-white bg-opacity-25">
+                    <i class="fas fa-money-bill-wave text-white"></i>
+                </div>
                 <h5 class="card-title">Total Amount Paid</h5>
-                <h2 class="display-4">₦{{ total_amount }}</h2>
-                <a href="{{ url_for('payment_history') }}" class="text-white">View History →</a>
+                <h2 class="display-4">${{ total_amount }}</h2>
+                <a href="{{ url_for('payment_history') }}" class="text-white text-decoration-none">View History <i class="fas fa-arrow-right"></i></a>
             </div>
         </div>
     </div>
@@ -41,9 +67,11 @@
                 <h5><i class="fas fa-clock"></i> Pending Payments</h5>
             </div>
             <div class="card-body">
-                <h3 class="text-warning">₦{{ pending_amount }}</h3>
+                <h3 class="text-warning">${{ pending_amount }}</h3>
                 <p>Amount awaiting payment</p>
-                <a href="{{ url_for('payments') }}" class="btn btn-warning">Process Now</a>
+                <a href="{{ url_for('payments') }}" class="btn btn-warning">
+                    <i class="fas fa-credit-card"></i> Process Now
+                </a>
             </div>
         </div>
     </div>
@@ -58,13 +86,24 @@
                         <h6>Quick Actions</h6>
                         <ul class="list-group">
                             <li class="list-group-item">
-                                <a href="{{ url_for('suppliers') }}">➕ Add New Supplier</a>
+                                <a href="{{ url_for('suppliers') }}" class="text-decoration-none">
+                                    <i class="fas fa-plus-circle text-primary"></i> Add New Supplier
+                                </a>
                             </li>
                             <li class="list-group-item">
-                                <a href="{{ url_for('payments') }}">💳 Process Payments</a>
+                                <a href="{{ url_for('payments') }}" class="text-decoration-none">
+                                    <i class="fas fa-credit-card text-success"></i> Process Payments
+                                </a>
                             </li>
                             <li class="list-group-item">
-                                <a href="{{ url_for('export_suppliers', format='excel') }}">📊 Export Supplier Data</a>
+                                <a href="{{ url_for('export_suppliers', format='excel') }}" class="text-decoration-none">
+                                    <i class="fas fa-file-excel text-success"></i> Export Supplier Data
+                                </a>
+                            </li>
+                            <li class="list-group-item">
+                                <a href="{{ url_for('export_all_payments_html') }}" class="text-decoration-none">
+                                    <i class="fas fa-file-pdf text-danger"></i> Export Payment Report
+                                </a>
                             </li>
                         </ul>
                     </div>
@@ -75,10 +114,16 @@
                                 <strong>Last Updated:</strong> {{ now }}
                             </li>
                             <li class="list-group-item">
-                                <strong>System Status:</strong> <span class="badge bg-success">Active</span>
+                                <strong>System Status:</strong>
+                                <span class="badge bg-success">Active</span>
                             </li>
                             <li class="list-group-item">
-                                <strong>Database:</strong> <span class="badge bg-info">Connected</span>
+                                <strong>Database:</strong>
+                                <span class="badge bg-info">Connected</span>
+                            </li>
+                            <li class="list-group-item">
+                                <strong>Currency:</strong>
+                                <span class="badge bg-primary">USD</span>
                             </li>
                         </ul>
                     </div>

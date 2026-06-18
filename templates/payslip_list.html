@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .selected-row {
+        background-color: #e3f2fd !important;
+    }
+    .bulk-actions {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        display: none;
+    }
+    .select-all-btn {
+        cursor: pointer;
+    }
+    .btn-payslip {
+        background: #28a745;
+        color: white;
+    }
+    .btn-payslip:hover {
+        background: #218838;
+        color: white;
+    }
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    .filter-section {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="card">
+    <div class="card-header bg-white">
+        <h4><i class="fas fa-file-alt"></i> Payslip Management</h4>
+    </div>
+    <div class="card-body">
+        <!-- Statistics -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <i class="fas fa-file-alt fa-2x"></i>
+                    <h6 class="mt-2">Total Payslips</h6>
+                    <h3>{{ payments|length }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">
+                    <i class="fas fa-money-bill-wave fa-2x"></i>
+                    <h6 class="mt-2">Total Amount</h6>
+                    <h3>${{ "{:,.0f}".format(total_amount|float) }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);">
+                    <i class="fas fa-users fa-2x"></i>
+                    <h6 class="mt-2">Suppliers</h6>
+                    <h3>{{ unique_suppliers }}</h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card" style="background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);">
+                    <i class="fas fa-calendar fa-2x"></i>
+                    <h6 class="mt-2">This Month</h6>
+                    <h3>${{ "{:,.0f}".format(monthly_total|float) }}</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section">
+            <div class="row">
+                <div class="col-md-4">
+                    <label>Pay Period (Month-Year)</label>
+                    <select id="payPeriodFilter" class="form-control" onchange="applyPayPeriodFilter()">
+                        <option value="">All Periods</option>
+                        {% for period in pay_periods %}
+                        <option value="{{ period }}">{{ period }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>Supplier</label>
+                    <select id="supplierFilter" class="form-control" onchange="applyPayPeriodFilter()">
+                        <option value="">All Suppliers</option>
+                        {% for supplier in suppliers %}
+                        <option value="{{ supplier.id }}">{{ supplier.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>Payment Type</label>
+                    <select id="paymentTypeFilter" class="form-control" onchange="applyPayPeriodFilter()">
+                        <option value="">All Types</option>
+                        <option value="Earning">Earning</option>
+                        <option value="Deduction">Deduction</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-12">
+                    <button class="btn btn-primary" onclick="applyPayPeriodFilter()">
+                        <i class="fas fa-search"></i> Apply Filters
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetPayPeriodFilter()">
+                        <i class="fas fa-undo"></i> Reset
+                    </button>
+                    <span class="ms-3" id="filteredCount">Showing: <strong>{{ payments|length }}</strong> payslips</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Actions Bar -->
+        <div id="bulkActions" class="bulk-actions">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <strong><span id="selectedCount">0</span> payslip(s) selected</strong>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button class="btn btn-payslip" onclick="downloadSelectedPayslips()">
+                        <i class="fas fa-file-pdf"></i> Download Selected Payslips
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearSelection()">
+                        <i class="fas fa-times"></i> Clear Selection
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payslip Table -->
+        <div class="table-responsive">
+            <table class="table table-hover" id="payslipTable">
+                <thead class="table-dark">
+                    <tr>
+                        <th width="50">
+                            <input type="checkbox" id="selectAll" class="select-all-btn" onclick="toggleSelectAll()">
+                        </th>
+                        <th>ID</th>
+                        <th>Pay Period</th>
+                        <th>Date</th>
+                        <th>Supplier</th>
+                        <th>Service Description</th>
+                        <th>Amount (USD)</th>
+                        <th>Payment Method</th>
+                        <th>Payment Type</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                    <tr id="payslip-row-{{ payment.id }}"
+                        data-payment-id="{{ payment.id }}"
+                        data-pay-period="{{ payment.pay_period }}"
+                        data-supplier="{{ payment.supplier_id }}"
+                        data-payment-type="{{ payment.payment_type }}">
+                        <td class="text-center">
+                            <input type="checkbox" class="payslip-checkbox" value="{{ payment.id }}" onclick="updateBulkActions()">
+                        </td>
+                        <td>{{ payment.id }}</td>
+                        <td>{{ payment.pay_period or 'N/A' }}</td>
+                        <td>{{ payment.payment_date }}</td>
+                        <td>{{ payment.supplier_name }}</td>
+                        <td>{{ payment.service_description }}</td>
+                        <td class="text-end">${{ "{:,.0f}".format(payment.amount) }}</td>
+                        <td>{{ payment.payment_method }}</td>
+                        <td>
+                            {% if payment.payment_type == 'Deduction' %}
+                                <span class="badge bg-danger">Deduction</span>
+                            {% else %}
+                                <span class="badge bg-success">Earning</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('payslip', payment_id=payment.id) }}" class="btn btn-sm btn-info" target="_blank" title="View Payslip">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{{ url_for('payslip_pdf', payment_id=payment.id) }}" class="btn btn-sm btn-payslip" target="_blank" title="Download PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="table-secondary">
+                    <tr>
+                        <th colspan="6" class="text-end">Total:</th>
+                        <th class="text-end" id="totalFooter">${{ "{:,.0f}".format(total_amount|float) }}</th>
+                        <th colspan="3"></th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedPayslips = new Set();
+
+// Toggle select all checkboxes
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.payslip-checkbox:not(:disabled)');
+
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+        if (selectAllCheckbox.checked) {
+            checkbox.closest('tr').classList.add('selected-row');
+            selectedPayslips.add(checkbox.value);
+        } else {
+            checkbox.closest('tr').classList.remove('selected-row');
+            selectedPayslips.clear();
+        }
+    });
+
+    updateBulkActions();
+}
+
+// Update bulk actions bar
+function updateBulkActions() {
+    const checkboxes = document.querySelectorAll('.payslip-checkbox:not(:disabled)');
+    const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+
+    selectedPayslips.clear();
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            selectedPayslips.add(checkbox.value);
+            checkbox.closest('tr').classList.add('selected-row');
+        } else {
+            checkbox.closest('tr').classList.remove('selected-row');
+        }
+    });
+
+    document.getElementById('selectedCount').innerText = selectedCount;
+    const bulkActions = document.getElementById('bulkActions');
+
+    if (selectedCount > 0) {
+        bulkActions.style.display = 'block';
+    } else {
+        bulkActions.style.display = 'none';
+    }
+
+    // Update select all checkbox state
+    const selectAllCheckbox = document.getElementById('selectAll');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = selectedCount === checkboxes.length && checkboxes.length > 0;
+        selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
+    }
+}
+
+// Clear all selections
+function clearSelection() {
+    const checkboxes = document.querySelectorAll('.payslip-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+        checkbox.closest('tr').classList.remove('selected-row');
+    });
+    selectedPayslips.clear();
+    updateBulkActions();
+
+    const selectAllCheckbox = document.getElementById('selectAll');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    }
+}
+
+// Apply Pay Period Filter
+function applyPayPeriodFilter() {
+    const payPeriod = document.getElementById('payPeriodFilter').value;
+    const supplierId = document.getElementById('supplierFilter').value;
+    const paymentType = document.getElementById('paymentTypeFilter').value;
+
+    const rows = document.querySelectorAll('#payslipTable tbody tr');
+    let total = 0;
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const rowPayPeriod = row.getAttribute('data-pay-period');
+        const rowSupplier = row.getAttribute('data-supplier');
+        const rowPaymentType = row.getAttribute('data-payment-type');
+        const checkbox = row.querySelector('.payslip-checkbox');
+        const amountText = row.querySelector('td:nth-child(7)').innerText.replace(/[$ ,]/g, '');
+        const amount = parseFloat(amountText) || 0;
+
+        let show = true;
+
+        if (payPeriod && rowPayPeriod !== payPeriod) show = false;
+        if (supplierId && rowSupplier !== supplierId) show = false;
+        if (paymentType && rowPaymentType !== paymentType) show = false;
+
+        if (show) {
+            row.style.display = '';
+            visibleCount++;
+            total += amount;
+            if (checkbox) checkbox.disabled = false;
+        } else {
+            row.style.display = 'none';
+            if (checkbox) {
+                checkbox.checked = false;
+                checkbox.disabled = true;
+            }
+        }
+    });
+
+    document.getElementById('totalFooter').innerHTML = `$${total.toLocaleString()}`;
+    document.getElementById('filteredCount').innerHTML = `Showing: <strong>${visibleCount}</strong> payslips`;
+
+    // Clear selections and update bulk actions
+    selectedPayslips.clear();
+    updateBulkActions();
+}
+
+// Reset Pay Period Filter
+function resetPayPeriodFilter() {
+    document.getElementById('payPeriodFilter').value = '';
+    document.getElementById('supplierFilter').value = '';
+    document.getElementById('paymentTypeFilter').value = '';
+
+    const rows = document.querySelectorAll('#payslipTable tbody tr');
+    let total = 0;
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        row.style.display = '';
+        const checkbox = row.querySelector('.payslip-checkbox');
+        if (checkbox) checkbox.disabled = false;
+        const amountText = row.querySelector('td:nth-child(7)').innerText.replace(/[$ ,]/g, '');
+        const amount = parseFloat(amountText) || 0;
+        total += amount;
+        visibleCount++;
+    });
+
+    document.getElementById('totalFooter').innerHTML = `$${total.toLocaleString()}`;
+    document.getElementById('filteredCount').innerHTML = `Showing: <strong>${visibleCount}</strong> payslips`;
+
+    selectedPayslips.clear();
+    updateBulkActions();
+}
+
+// Download selected payslips
+function downloadSelectedPayslips() {
+    const selectedIds = Array.from(selectedPayslips);
+
+    if (selectedIds.length === 0) {
+        alert('Please select at least one payslip to download.');
+        return;
+    }
+
+    if (selectedIds.length === 1) {
+        window.open(`/payslip/pdf/${selectedIds[0]}`, '_blank');
+    } else {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for('bulk_payslip_pdf') }}';
+        form.target = '_blank';
+
+        selectedIds.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'payment_ids[]';
+            input.value = id;
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    }
+
+    clearSelection();
+}
+
+// Initialize DataTable
+$(document).ready(function() {
+    if ($.fn.DataTable) {
+        $('#payslipTable').DataTable({
+            pageLength: 10,
+            responsive: true,
+            order: [[1, 'desc']],
+            language: {
+                search: "Search:",
+                lengthMenu: "Show _MENU_ entries",
+                info: "Showing _START_ to _END_ of _TOTAL_ entries",
+                infoEmpty: "No entries found",
+                infoFiltered: "(filtered from _MAX_ total entries)",
+                paginate: {
+                    first: "First",
+                    last: "Last",
+                    next: "Next",
+                    previous: "Previous"
+                }
+            },
+            drawCallback: function() {
+                const newCheckboxes = document.querySelectorAll('.payslip-checkbox');
+                newCheckboxes.forEach(checkbox => {
+                    checkbox.addEventListener('change', updateBulkActions);
+                });
+            }
+        });
+    }
+
+    updateBulkActions();
+});
+</script>
+{% endblock %}

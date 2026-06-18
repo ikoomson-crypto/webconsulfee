@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Payslip - {{ payment.supplier_name }}</title>
+    <style>
+        @page {
+            margin: 10mm;
+            size: A4;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: white;
+        }
+        .payslip-container {
+            max-width: 900px;
+            margin: 0 auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            background: white;
+        }
+        .payslip-header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            padding: 25px 30px;
+            text-align: center;
+        }
+        .payslip-title {
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #ffffff;
+        }
+        .company-logo {
+            max-height: 50px;
+            margin-bottom: 10px;
+        }
+        .company-name {
+            font-size: 16px;
+            font-weight: 500;
+            margin-top: 5px;
+            color: #ffffff;
+        }
+        .company-details {
+            font-size: 12px;
+            margin-top: 5px;
+            line-height: 1.5;
+            color: #000000 !important;
+            background: #ffffff;
+            padding: 8px 15px;
+            border-radius: 5px;
+            display: inline-block;
+        }
+        .company-details span {
+            color: #000000 !important;
+        }
+        .company-details a {
+            color: #000000 !important;
+            text-decoration: none;
+        }
+        .content {
+            padding: 25px 30px;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 15px;
+            font-weight: bold;
+            color: #28a745;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #28a745;
+        }
+
+        /* Consultant Details - Horizontal Layout */
+        .consultant-grid {
+            display: table;
+            width: 100%;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-collapse: collapse;
+        }
+        .consultant-grid .row {
+            display: table-row;
+        }
+        .consultant-grid .cell {
+            display: table-cell;
+            text-align: left;
+            padding: 5px 15px;
+            vertical-align: top;
+        }
+        .consultant-grid .label {
+            font-weight: bold;
+            color: #555;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+            margin-bottom: 3px;
+        }
+        .consultant-grid .value {
+            color: #333;
+            font-size: 13px;
+            word-break: break-word;
+        }
+        .consultant-grid .value strong {
+            font-size: 14px;
+        }
+
+        /* Bank Details - Horizontal Layout */
+        .bank-grid {
+            display: table;
+            width: 100%;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-collapse: collapse;
+        }
+        .bank-grid .row {
+            display: table-row;
+        }
+        .bank-grid .cell {
+            display: table-cell;
+            text-align: left;
+            padding: 5px 15px;
+            vertical-align: top;
+        }
+        .bank-grid .label {
+            font-weight: bold;
+            color: #555;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+            margin-bottom: 3px;
+        }
+        .bank-grid .value {
+            color: #333;
+            font-size: 13px;
+            word-break: break-word;
+        }
+
+        /* Payment Summary - Horizontal Layout */
+        .payment-grid {
+            display: table;
+            width: 100%;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-collapse: collapse;
+        }
+        .payment-grid .row {
+            display: table-row;
+        }
+        .payment-grid .cell {
+            display: table-cell;
+            text-align: left;
+            padding: 5px 15px;
+            vertical-align: top;
+        }
+        .payment-grid .label {
+            font-weight: bold;
+            color: #555;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+            margin-bottom: 3px;
+        }
+        .payment-grid .value {
+            color: #333;
+            font-size: 13px;
+            word-break: break-word;
+        }
+
+        .amount-large {
+            font-size: 20px;
+            color: #28a745;
+            font-weight: bold;
+        }
+        .divider {
+            border: none;
+            border-top: 2px dashed #ddd;
+            margin: 15px 0;
+        }
+        .disclaimer {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px 15px;
+            border-radius: 5px;
+            font-size: 11px;
+            color: #856404;
+            margin-top: 15px;
+            line-height: 1.5;
+            text-align: left;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: center;
+            font-size: 10px;
+            color: #888;
+            border-top: 1px solid #e0e0e0;
+        }
+        .words-amount {
+            text-align: right;
+            font-size: 12px;
+            color: #666;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #ddd;
+        }
+        @media print {
+            .consultant-grid, .bank-grid, .payment-grid {
+                break-inside: avoid;
+            }
+            .payslip-header {
+                background: #28a745 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            .company-details {
+                background: #ffffff !important;
+                color: #000000 !important;
+            }
+            .company-details span {
+                color: #000000 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="payslip-container">
+        <div class="payslip-header">
+            {% if company_logo %}
+                <img src="{{ company_logo }}" class="company-logo" alt="Logo">
+            {% endif %}
+            <div class="payslip-title">PAYSLIP</div>
+            {% if company_settings.company_name %}
+                <div class="company-name">{{ company_settings.company_name }}</div>
+            {% endif %}
+            <div class="company-details">
+                <span>{% if company_settings.company_address %}{{ company_settings.company_address }}{% endif %}</span>
+                {% if company_settings.company_phone %}<span> | {{ company_settings.company_phone }}</span>{% endif %}
+                {% if company_settings.company_email %}<span> | {{ company_settings.company_email }}</span>{% endif %}
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Consultant Details - Horizontal Layout -->
+            <div class="section">
+                <div class="section-title">Consultant Details</div>
+                <div class="consultant-grid">
+                    <div class="row">
+                        <div class="cell">
+                            <span class="label">Consultant Name</span>
+                            <span class="value"><strong>{{ payment.supplier_name }}</strong></span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Role</span>
+                            <span class="value">{{ payment.role or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">ID Number</span>
+                            <span class="value">{{ payment.id_number or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Payment Period</span>
+                            <span class="value">{{ payment_period }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr class="divider">
+
+            <!-- Bank Details - Horizontal Layout -->
+            <div class="section">
+                <div class="section-title">Bank Account Details</div>
+                <div class="bank-grid">
+                    <div class="row">
+                        <div class="cell">
+                            <span class="label">Bank Name</span>
+                            <span class="value">{{ payment.bank_name or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Account Name</span>
+                            <span class="value">{{ payment.account_name or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Account Number</span>
+                            <span class="value">{{ payment.account_number or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">SWIFT Code</span>
+                            <span class="value">{{ payment.swift_code or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Bank Address</span>
+                            <span class="value">{{ payment.bank_address or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Payment Method</span>
+                            <span class="value">{{ payment.payment_method }}</span>
+                        </div>
+
+                        <!-- In the Bank Details section, add Payment Type -->
+                    <div class="cell">
+                        <span class="label">Payment Type</span>
+                        <span class="value">
+                            {% if payment.payment_type == 'Deduction' %}
+                                <span style="color: #dc3545;">Deduction</span>
+                            {% else %}
+                                <span style="color: #28a745;">Earning</span>
+                            {% endif %}
+                        </span>
+                    </div>
+
+
+                    </div>
+                </div>
+            </div>
+
+            <hr class="divider">
+
+            <!-- Payment Summary - Horizontal Layout -->
+            <div class="section">
+                <div class="section-title">Payment Summary</div>
+                <div class="payment-grid">
+                    <div class="row">
+                        <div class="cell">
+                            <span class="label">Service Description</span>
+                            <span class="value">{{ payment.service_description }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Amount (USD)</span>
+                            <span class="value amount-large">${{ "{:,.2f}".format(payment.amount) }}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="words-amount">
+                    Amount in words: <strong>{{ amount_in_words(payment.amount) }} Dollars</strong>
+                </div>
+            </div>
+
+            <!-- Disclaimer -->
+            <div class="disclaimer">
+                <strong>Disclaimer:</strong> The recipient shall bear sole responsibility for complying with all applicable tax filing and reporting obligations within their tax jurisdiction.
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>This is a computer-generated payslip and requires no signature.</p>
+            <p>Generated on: {{ now.strftime('%Y-%m-%d %H:%M:%S') if now else '' }}</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -49,6 +49,15 @@
         background: #138496;
         color: white;
     }
+    .btn-payslip {
+        background: #28a745;
+        color: white;
+        margin: 0 2px;
+    }
+    .btn-payslip:hover {
+        background: #218838;
+        color: white;
+    }
     .btn-delete {
         background: #6c757d;
         color: white;
@@ -68,6 +77,37 @@
     }
     .btn-pdf:hover {
         background: #c82333;
+        color: white;
+    }
+    .selected-row {
+        background-color: #e3f2fd !important;
+    }
+    .bulk-actions {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        display: none;
+    }
+    .select-all-btn {
+        cursor: pointer;
+    }
+    .btn-bulk-invoice {
+        background: #dc3545;
+        color: white;
+        margin: 0 5px;
+    }
+    .btn-bulk-invoice:hover {
+        background: #c82333;
+        color: white;
+    }
+    .btn-bulk-payslip {
+        background: #28a745;
+        color: white;
+        margin: 0 5px;
+    }
+    .btn-bulk-payslip:hover {
+        background: #218838;
         color: white;
     }
 </style>
@@ -152,6 +192,26 @@
             </div>
         </div>
 
+        <!-- Bulk Actions Bar -->
+        <div id="bulkActions" class="bulk-actions">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <strong><span id="selectedCount">0</span> payment(s) selected</strong>
+                </div>
+                <div class="col-md-8 text-end">
+                    <button class="btn btn-bulk-invoice" onclick="downloadSelectedInvoices()">
+                        <i class="fas fa-file-pdf"></i> Download Selected Invoices
+                    </button>
+                    <button class="btn btn-bulk-payslip" onclick="downloadSelectedPayslips()">
+                        <i class="fas fa-file-alt"></i> Download Selected Payslips
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearSelection()">
+                        <i class="fas fa-times"></i> Clear Selection
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Export Buttons -->
         <div class="export-buttons">
             <div class="btn-group">
@@ -173,25 +233,39 @@
             <table class="table table-hover" id="historyTable">
                 <thead class="table-dark">
                     <tr>
+                        <th width="50">
+                            <input type="checkbox" id="selectAll" class="select-all-btn" onclick="toggleSelectAll()">
+                        </th>
                         <th>ID</th>
                         <th>Date</th>
                         <th>Supplier</th>
                         <th>Service Description</th>
                         <th>Amount (USD)</th>
                         <th>Payment Method</th>
+                        <th>Payment Type</th>
                         <th>Reference</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for payment in payments %}
-                    <tr data-supplier="{{ payment.supplier_id }}" data-method="{{ payment.payment_method }}" data-date="{{ payment.payment_date }}">
+                    <tr id="payment-row-{{ payment.id }}" data-supplier="{{ payment.supplier_id }}" data-method="{{ payment.payment_method }}" data-date="{{ payment.payment_date }}" data-payment-id="{{ payment.id }}">
+                        <td class="text-center">
+                            <input type="checkbox" class="payment-checkbox" value="{{ payment.id }}" onclick="updateBulkActions()">
+                        </td>
                         <td>{{ payment.id }}</td>
                         <td>{{ payment.payment_date }}</td>
                         <td>{{ payment.supplier_name }}</td>
                         <td>{{ payment.service_description }}</td>
                         <td class="text-end">${{ "{:,.0f}".format(payment.amount) }}</td>
                         <td>{{ payment.payment_method }}</td>
+                        <td>
+                            {% if payment.payment_type == 'Deduction' %}
+                                <span class="badge bg-danger">Deduction</span>
+                            {% else %}
+                                <span class="badge bg-success">Earning</span>
+                            {% endif %}
+                        </td>
                         <td>{{ payment.reference_number or '-' }}</td>
                         <td class="action-buttons">
                             <button class="btn btn-sm btn-receipt" onclick="viewReceipt({{ payment.id }})" title="View Receipt">
@@ -199,6 +273,9 @@
                             </button>
                             <a href="{{ url_for('export_invoice_pdf', payment_id=payment.id) }}" class="btn btn-sm btn-invoice" target="_blank" title="Download PDF Invoice">
                                 <i class="fas fa-file-pdf"></i>
+                            </a>
+                            <a href="{{ url_for('payslip', payment_id=payment.id) }}" class="btn btn-sm btn-payslip" target="_blank" title="View Payslip">
+                                <i class="fas fa-file-alt"></i>
                             </a>
                             <button class="btn btn-sm btn-delete" onclick="deletePayment({{ payment.id }})" title="Delete Payment">
                                 <i class="fas fa-trash"></i>
@@ -209,9 +286,9 @@
                 </tbody>
                 <tfoot class="table-secondary">
                     <tr>
-                        <th colspan="4" class="text-end">Total:</th>
+                        <th colspan="5" class="text-end">Total:</th>
                         <th class="text-end" id="totalFooter">${{ "{:,.0f}".format(total_paid|float) }}</th>
-                        <th colspan="3"></th>
+                        <th colspan="4"></th>
                     </tr>
                 </tfoot>
             </table>
@@ -239,6 +316,8 @@
 </div>
 
 <script>
+let selectedPayments = new Set();
+
 function viewReceipt(paymentId) {
     fetch(`/get_receipt/${paymentId}`)
         .then(response => response.json())
@@ -283,6 +362,134 @@ function deletePayment(paymentId) {
     }
 }
 
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.payment-checkbox');
+
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+        if (selectAllCheckbox.checked) {
+            checkbox.closest('tr').classList.add('selected-row');
+            selectedPayments.add(checkbox.value);
+        } else {
+            checkbox.closest('tr').classList.remove('selected-row');
+            selectedPayments.clear();
+        }
+    });
+
+    updateBulkActions();
+}
+
+function updateBulkActions() {
+    const checkboxes = document.querySelectorAll('.payment-checkbox');
+    const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+
+    selectedPayments.clear();
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            selectedPayments.add(checkbox.value);
+            checkbox.closest('tr').classList.add('selected-row');
+        } else {
+            checkbox.closest('tr').classList.remove('selected-row');
+        }
+    });
+
+    document.getElementById('selectedCount').innerText = selectedCount;
+    const bulkActions = document.getElementById('bulkActions');
+
+    if (selectedCount > 0) {
+        bulkActions.style.display = 'block';
+    } else {
+        bulkActions.style.display = 'none';
+    }
+
+    const selectAllCheckbox = document.getElementById('selectAll');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = selectedCount === checkboxes.length && checkboxes.length > 0;
+        selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
+    }
+}
+
+function clearSelection() {
+    const checkboxes = document.querySelectorAll('.payment-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+        checkbox.closest('tr').classList.remove('selected-row');
+    });
+    selectedPayments.clear();
+    updateBulkActions();
+
+    const selectAllCheckbox = document.getElementById('selectAll');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+    }
+}
+
+function downloadSelectedInvoices() {
+    const selectedIds = Array.from(selectedPayments);
+
+    if (selectedIds.length === 0) {
+        alert('Please select at least one payment to download.');
+        return;
+    }
+
+    if (selectedIds.length === 1) {
+        window.open(`/export_invoice_pdf/${selectedIds[0]}`, '_blank');
+    } else {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for('bulk_invoice_pdf') }}';
+        form.target = '_blank';
+
+        selectedIds.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'payment_ids[]';
+            input.value = id;
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    }
+
+    clearSelection();
+}
+
+function downloadSelectedPayslips() {
+    const selectedIds = Array.from(selectedPayments);
+
+    if (selectedIds.length === 0) {
+        alert('Please select at least one payment to download.');
+        return;
+    }
+
+    if (selectedIds.length === 1) {
+        window.open(`/payslip/pdf/${selectedIds[0]}`, '_blank');
+    } else {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for('bulk_payslip_pdf') }}';
+        form.target = '_blank';
+
+        selectedIds.forEach(id => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'payment_ids[]';
+            input.value = id;
+            form.appendChild(input);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+    }
+
+    clearSelection();
+}
+
 function applyFilters() {
     const startDate = document.getElementById('startDate').value;
     const endDate = document.getElementById('endDate').value;
@@ -296,7 +503,7 @@ function applyFilters() {
         const rowDate = row.getAttribute('data-date');
         const rowSupplier = row.getAttribute('data-supplier');
         const rowMethod = row.getAttribute('data-method');
-        const amountText = row.querySelector('td:nth-child(5)').innerText.replace(/[$ ,]/g, '');
+        const amountText = row.querySelector('td:nth-child(6)').innerText.replace(/[$ ,]/g, '');
         const amount = parseFloat(amountText);
 
         let show = true;
@@ -328,7 +535,7 @@ function resetFilters() {
 
     rows.forEach(row => {
         row.style.display = '';
-        const amountText = row.querySelector('td:nth-child(5)').innerText.replace(/[$ ,]/g, '');
+        const amountText = row.querySelector('td:nth-child(6)').innerText.replace(/[$ ,]/g, '');
         const amount = parseFloat(amountText);
         total += amount;
     });
@@ -342,14 +549,15 @@ function exportData(format) {
 
     visibleRows.forEach(row => {
         const cells = row.querySelectorAll('td');
+        const amountText = cells[5].innerText.replace(/[$ ,]/g, '');
         data.push({
             'ID': cells[0].innerText,
             'Date': cells[1].innerText,
             'Supplier': cells[2].innerText,
             'Service': cells[3].innerText,
-            'Amount': cells[4].innerText,
-            'Method': cells[5].innerText,
-            'Reference': cells[6].innerText
+            'Amount': amountText,
+            'Method': cells[6].innerText,
+            'Reference': cells[8].innerText
         });
     });
 
@@ -373,13 +581,12 @@ function exportData(format) {
     }
 }
 
-// Initialize DataTable
 $(document).ready(function() {
     if ($.fn.DataTable) {
         $('#historyTable').DataTable({
             pageLength: 10,
             responsive: true,
-            order: [[0, 'desc']],
+            order: [[1, 'desc']],
             language: {
                 search: "Search:",
                 lengthMenu: "Show _MENU_ entries",
@@ -392,9 +599,17 @@ $(document).ready(function() {
                     next: "Next",
                     previous: "Previous"
                 }
+            },
+            drawCallback: function() {
+                const newCheckboxes = document.querySelectorAll('.payment-checkbox');
+                newCheckboxes.forEach(checkbox => {
+                    checkbox.addEventListener('change', updateBulkActions);
+                });
             }
         });
     }
+
+    updateBulkActions();
 });
 </script>
 {% endblock %}
