@@ -5,18 +5,8 @@
     <title>Invoice #{{ payment.reference_number or "%06d" % payment_id }}</title>
     <style>
         @media print {
-            body {
-                margin: 0;
-                padding: 0;
-            }
-            .no-print {
-                display: none !important;
-            }
-            .invoice-container {
-                box-shadow: none;
-                margin: 0;
-                border-radius: 0;
-            }
+            body { margin: 0; padding: 20px; }
+            .no-print { display: none; }
         }
         * {
             margin: 0;
@@ -26,7 +16,7 @@
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: #f0f2f5;
-            padding: 20px;
+            padding: 40px;
         }
         .invoice-container {
             max-width: 900px;
@@ -37,24 +27,26 @@
             overflow: hidden;
         }
         .invoice-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            background: #ffffff;
+            padding: 30px 35px;
+            text-align: right;
+            border-bottom: 2px solid #667eea;
         }
         .invoice-title {
             font-size: 32px;
-            margin-bottom: 10px;
             font-weight: bold;
+            color: #000000;
+            letter-spacing: 2px;
         }
         .invoice-number {
-            font-size: 18px;
-            opacity: 0.9;
+            font-size: 16px;
+            color: #333333;
+            margin-top: 5px;
         }
         .invoice-date {
             font-size: 14px;
-            opacity: 0.8;
-            margin-top: 10px;
+            color: #666666;
+            margin-top: 3px;
         }
         .content {
             padding: 30px;
@@ -70,25 +62,76 @@
             padding-bottom: 8px;
             border-bottom: 2px solid #667eea;
         }
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
+
+        /* Horizontal layout for consultant details */
+        .consultant-horizontal {
+            display: table;
+            width: 100%;
             background: #f8f9fa;
-            padding: 20px;
+            padding: 15px 20px;
             border-radius: 10px;
+            border-collapse: collapse;
         }
-        .info-label {
+        .consultant-horizontal .row {
+            display: table-row;
+        }
+        .consultant-horizontal .cell {
+            display: table-cell;
+            text-align: left;
+            padding: 5px 15px;
+            vertical-align: top;
+        }
+        .consultant-horizontal .label {
             font-weight: bold;
             color: #555;
-            margin-bottom: 5px;
-            font-size: 12px;
+            font-size: 11px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+            margin-bottom: 3px;
         }
-        .info-value {
+        .consultant-horizontal .value {
             color: #333;
             font-size: 14px;
+            word-break: break-word;
         }
+        .consultant-horizontal .value strong {
+            font-size: 15px;
+        }
+
+        /* Horizontal layout for bank details */
+        .bank-horizontal {
+            display: table;
+            width: 100%;
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-radius: 10px;
+            border-collapse: collapse;
+        }
+        .bank-horizontal .row {
+            display: table-row;
+        }
+        .bank-horizontal .cell {
+            display: table-cell;
+            text-align: left;
+            padding: 5px 15px;
+            vertical-align: top;
+        }
+        .bank-horizontal .label {
+            font-weight: bold;
+            color: #555;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: block;
+            margin-bottom: 3px;
+        }
+        .bank-horizontal .value {
+            color: #333;
+            font-size: 14px;
+            word-break: break-word;
+        }
+
         .invoice-table {
             width: 100%;
             border-collapse: collapse;
@@ -109,12 +152,6 @@
             font-size: 24px;
             color: #28a745;
             font-weight: bold;
-        }
-        .bank-details {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 15px;
         }
         .footer {
             background: #f8f9fa;
@@ -139,9 +176,6 @@
         .btn-print:hover {
             transform: translateY(-2px);
         }
-        .mt-2 {
-            margin-top: 10px;
-        }
     </style>
 </head>
 <body>
@@ -159,28 +193,32 @@
         </div>
 
         <div class="content">
+            <!-- Consultant Details - Horizontal Layout -->
             <div class="section">
                 <div class="section-title">Consultant Details</div>
-                <div class="info-grid">
-                    <div>
-                        <div class="info-label">Consultant Name</div>
-                        <div class="info-value">{{ payment.supplier_name }}</div>
-                        <div class="info-label mt-2">Address</div>
-                        <div class="info-value">{{ payment.address or 'N/A' }}</div>
-                        <div class="info-label mt-2">Telephone</div>
-                        <div class="info-value">{{ payment.telephone or 'N/A' }}</div>
-                    </div>
-                    <div>
-                        <div class="info-label">ID Type</div>
-                        <div class="info-value">{{ payment.id_type or 'N/A' }}</div>
-                        <div class="info-label mt-2">ID Number</div>
-                        <div class="info-value">{{ payment.id_number or 'N/A' }}</div>
-                        <div class="info-label mt-2">Street Address</div>
-                        <div class="info-value">{{ payment.street_address or 'N/A' }}</div>
+                <div class="consultant-horizontal">
+                    <div class="row">
+                        <div class="cell">
+                            <span class="label">Consultant Name</span>
+                            <span class="value"><strong>{{ payment.supplier_name }}</strong></span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Address</span>
+                            <span class="value">{{ payment.address or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Telephone</span>
+                            <span class="value">{{ payment.telephone or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">ID Number</span>
+                            <span class="value">{{ payment.id_number or 'N/A' }}</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
+            <!-- Invoice Details -->
             <div class="section">
                 <div class="section-title">Invoice Details</div>
                 <table class="invoice-table">
@@ -199,31 +237,46 @@
                 </table>
             </div>
 
+            <!-- Bank Details - Horizontal Layout -->
             <div class="section">
                 <div class="section-title">Bank Account Details</div>
-                <div class="bank-details">
-                    <div class="info-grid">
-                        <div>
-                            <div class="info-label">Bank Name</div>
-                            <div class="info-value">{{ payment.bank_name or 'N/A' }}</div>
-                            <div class="info-label mt-2">Account Name</div>
-                            <div class="info-value">{{ payment.account_name or 'N/A' }}</div>
+                <div class="bank-horizontal">
+                    <div class="row">
+                        <div class="cell">
+                            <span class="label">Bank Name</span>
+                            <span class="value">{{ payment.bank_name or 'N/A' }}</span>
                         </div>
-                        <div>
-                            <div class="info-label">Account Number</div>
-                            <div class="info-value">{{ payment.account_number or 'N/A' }}</div>
-                            <div class="info-label mt-2">SWIFT Code</div>
-                            <div class="info-value">{{ payment.swift_code or 'N/A' }}</div>
+                        <div class="cell">
+                            <span class="label">Account Name</span>
+                            <span class="value">{{ payment.account_name or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Account Number</span>
+                            <span class="value">{{ payment.account_number or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">SWIFT Code</span>
+                            <span class="value">{{ payment.swift_code or 'N/A' }}</span>
                         </div>
                     </div>
-                    <div class="info-label mt-2">Bank Address</div>
-                    <div class="info-value">{{ payment.bank_address or 'N/A' }}</div>
+                    <div class="row">
+                        <div class="cell">
+                            <span class="label">Bank Address</span>
+                            <span class="value">{{ payment.bank_address or 'N/A' }}</span>
+                        </div>
+                        <div class="cell">
+                            <span class="label">Payment Method</span>
+                            <span class="value">{{ payment.payment_method }}</span>
+                        </div>
+                        <div class="cell" style="visibility: hidden;"></div>
+                        <div class="cell" style="visibility: hidden;"></div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="footer">
-            <!-- Footer content removed -->
+            <p>Thank you for your business!</p>
         </div>
     </div>
 </body>

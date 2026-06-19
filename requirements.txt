@@ -31,3 +31,4 @@ wheel==0.47.0
 zopfli==0.4.3
 weasyprint ==60.2
 pdfkit==1.0.0
+psycopg2-binary==2.9.9
