@@ -804,6 +804,7 @@ def payment_history():
     cursor = db.cursor()
 
     if DATABASE_URL:
+        # PostgreSQL query
         cursor.execute('''
             SELECT p.*, s.name as supplier_name, sv.service_description, p.payment_type
             FROM payments p
@@ -812,6 +813,7 @@ def payment_history():
             ORDER BY p.payment_date DESC
         ''')
     else:
+        # SQLite query
         cursor.execute('''
             SELECT p.*, s.name as supplier_name, sv.service_description, p.payment_type
             FROM payments p
@@ -844,37 +846,43 @@ def payment_history():
             'supplier_id': payment_dict['supplier_id']
         })
 
-    suppliers = []
-    if DATABASE_URL:
-        cursor = db.cursor()
-        cursor.execute("SELECT id, name FROM suppliers ORDER BY name")
-        suppliers_data = cursor.fetchall()
-        db.close()
-        for s in suppliers_data:
-            suppliers.append({'id': s[0], 'name': s[1]})
-    else:
-        db = get_db()
-        cursor = db.cursor()
-        cursor.execute("SELECT id, name FROM suppliers ORDER BY name")
-        suppliers_data = cursor.fetchall()
-        db.close()
-        for s in suppliers_data:
-            suppliers.append({'id': s[0], 'name': s[1]})
-
+    # Get suppliers for filter
     db = get_db()
     cursor = db.cursor()
     if DATABASE_URL:
+        cursor.execute("SELECT id, name FROM suppliers ORDER BY name")
+        suppliers_data = cursor.fetchall()
+        db.close()
+        suppliers = [{'id': s[0], 'name': s[1]} for s in suppliers_data]
+    else:
+        cursor.execute("SELECT id, name FROM suppliers ORDER BY name")
+        suppliers_data = cursor.fetchall()
+        db.close()
+        suppliers = [{'id': s[0], 'name': s[1]} for s in suppliers_data]
+
+    # Calculate totals
+    db = get_db()
+    cursor = db.cursor()
+    if DATABASE_URL:
+        # PostgreSQL date functions
         cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments")
         total_paid = cursor.fetchone()[0] or 0
-        cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')")
+
+        cursor.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE EXTRACT(YEAR FROM payment_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM payment_date) = EXTRACT(MONTH FROM CURRENT_DATE)")
         monthly_total = cursor.fetchone()[0] or 0
+
         cursor.execute("SELECT COUNT(DISTINCT supplier_id) FROM payments")
         unique_suppliers = cursor.fetchone()[0] or 0
     else:
+        # SQLite date functions
         cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments")
         total_paid = cursor.fetchone()[0] or 0
-        cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')")
+
+        cursor.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')")
         monthly_total = cursor.fetchone()[0] or 0
+
         cursor.execute("SELECT COUNT(DISTINCT supplier_id) FROM payments")
         unique_suppliers = cursor.fetchone()[0] or 0
     db.close()
@@ -885,7 +893,6 @@ def payment_history():
                            total_paid=total_paid,
                            monthly_total=monthly_total,
                            unique_suppliers=unique_suppliers)
-
 
 @app.route('/invoice/<int:payment_id>')
 def invoice(payment_id):
@@ -1198,10 +1205,12 @@ def payslip_pdf(payment_id):
 
 @app.route('/payslip/list')
 def payslip_list():
+    """List all payslips"""
     db = get_db()
     cursor = db.cursor()
 
     if DATABASE_URL:
+        # PostgreSQL query
         cursor.execute('''
             SELECT p.*, s.name as supplier_name, sv.service_description, p.payment_type
             FROM payments p
@@ -1210,6 +1219,7 @@ def payslip_list():
             ORDER BY p.payment_date DESC
         ''')
     else:
+        # SQLite query
         cursor.execute('''
             SELECT p.*, s.name as supplier_name, sv.service_description, p.payment_type
             FROM payments p
@@ -1254,33 +1264,42 @@ def payslip_list():
             'supplier_id': payment_dict['supplier_id']
         })
 
+    # Get suppliers for filter
     db = get_db()
     cursor = db.cursor()
     if DATABASE_URL:
         cursor.execute("SELECT id, name FROM suppliers ORDER BY name")
         suppliers_data = cursor.fetchall()
-        db.close()
         suppliers = [{'id': s[0], 'name': s[1]} for s in suppliers_data]
     else:
         cursor.execute("SELECT id, name FROM suppliers ORDER BY name")
         suppliers_data = cursor.fetchall()
-        db.close()
         suppliers = [{'id': s[0], 'name': s[1]} for s in suppliers_data]
+    db.close()
 
+    # Calculate totals
     db = get_db()
     cursor = db.cursor()
     if DATABASE_URL:
+        # PostgreSQL date functions
         cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments")
         total_amount = cursor.fetchone()[0] or 0
-        cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')")
+
+        cursor.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE EXTRACT(YEAR FROM payment_date) = EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM payment_date) = EXTRACT(MONTH FROM CURRENT_DATE)")
         monthly_total = cursor.fetchone()[0] or 0
+
         cursor.execute("SELECT COUNT(DISTINCT supplier_id) FROM payments")
         unique_suppliers = cursor.fetchone()[0] or 0
     else:
+        # SQLite date functions
         cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments")
         total_amount = cursor.fetchone()[0] or 0
-        cursor.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')")
+
+        cursor.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM payments WHERE strftime('%Y-%m', payment_date) = strftime('%Y-%m', 'now')")
         monthly_total = cursor.fetchone()[0] or 0
+
         cursor.execute("SELECT COUNT(DISTINCT supplier_id) FROM payments")
         unique_suppliers = cursor.fetchone()[0] or 0
     db.close()
@@ -1302,7 +1321,6 @@ def payslip_list():
                            total_amount=total_amount,
                            monthly_total=monthly_total,
                            unique_suppliers=unique_suppliers)
-
 
 @app.route('/bulk_payslip_pdf', methods=['POST'])
 def bulk_payslip_pdf():
@@ -1520,6 +1538,7 @@ def remove_logo():
 
 @app.route('/export_all_payments_html')
 def export_all_payments_html():
+    """Export all payments as HTML report"""
     db = get_db()
     cursor = db.cursor()
 
@@ -1567,7 +1586,6 @@ def export_all_payments_html():
                            payments=payments_list,
                            total_amount=total_amount,
                            now=datetime.now())
-
 
 @app.route('/get_receipt/<int:payment_id>')
 def get_receipt(payment_id):
